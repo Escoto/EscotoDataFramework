@@ -2,16 +2,6 @@
 
 A configuration-driven data platform for quick data onboarding and processing on Databricks. Datasets are onboarded by writing a workflow YAML, not by writing Python.
 
-Your data is processed by Five layers, each talking to the next only through a `Context` and a `DataFrame`:
-
-| Layer | Responsibility |
-|---|---|
-| **Start** | Load and validate task configuration -> `Context`. Unknown keys are rejected. |
-| **Pipeline** | Read from the configured origin (CSV / JSON / SAS / Delta), apply pre-processors, add provenance. |
-| **Typing** | Apply type casting according to your configs. |
-| **Policies** | Evaluate data quality rules with `warn` or `fail` severity. |
-| **Output** | Output write with a verb: `append`, `full`, `upsert`, `scd2`, `complete_delta`. |
-
 ### Built With
 
 - [![Databricks][Databricks]][Databricks-url]
@@ -19,18 +9,6 @@ Your data is processed by Five layers, each talking to the next only through a `
 - [![Spark][Spark]][Spark-url]
 - [![Pandas][Pandas]][Pandas-url]
 
-## Write verbs
-
-| Verb | Semantics |
-|---|---|
-| `append` | Add rows. No matching, no history. |
-| `full` | Overwrite the target. An empty input is skipped, never written. |
-| `upsert` | SCD Type 1 — one row per key, newer wins, no history. |
-| `scd2` | SCD Type 2 — close the superseded version, insert the new one. |
-| `complete_delta` | Split a backlog of exports into snapshots and replay them through the SCD2 engine, in order. |
-
-`scd2` and `complete_delta` maintain `__START_DATE`, `__END_DATE`, __CURRENT_FLAG` and `__DELETED_FLAG`.
-A validity window opens at the record's own event time (replaying a week-old backlog reconstructs the real history instead of collapsing it onto the moment the job happened to run).
 
 ## Documentation
 
@@ -84,45 +62,11 @@ settings are in `.flake8`.
 
 ## Deploying to Databricks
 
-`make build` produces `dist/data_framework-0.1.0-py3-none-any.whl` with the console-script
-entry point `run`, which is what a `python_wheel_task` expects:
-
-```yaml
-python_wheel_task:
-  package_name: data_framework
-  entry_point: run
-  named_parameters: { ... }
-```
-
-The bundle in [databricks.yml](databricks.yml) builds and uploads that wheel and deploys the
-platform-test jobs. No workspace URL is committed — authenticate with a CLI profile or with
-`DATABRICKS_HOST` / `DATABRICKS_TOKEN`:
+The bundle in [databricks.yml](databricks.yml) is configured to work with a python wheel. It builds the python wheel then deploys the the bundle. Authenticate with a CLI profile or with `DATABRICKS_HOST` / `DATABRICKS_TOKEN`:
 
 ```bash
 databricks bundle deploy
 ```
-
-## E2E Testing
-
-Pre-requirements:
-1. Catalog: `testing_${bundle.target}` (`testing_dev_01`)
-2. Schema: `functional_testing`.
-3. Volume: `/Volumes/testing_dev_01/functional_testing/`
-
-```bash
-databricks bundle run e2e_test_suite
-```
-
-Platform tests run as real Databricks jobs — each generates its own fixtures, runs the
-framework over them, and asserts the resulting tables. See
-[docs/05_testing.md](docs/05_testing.md).
-
-## Unit Testing
-
-```bash
-make test    # unit tests, local Spark
-```
-
 
 ## License
 
