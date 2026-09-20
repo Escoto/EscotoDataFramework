@@ -1,16 +1,23 @@
-# Escoto Databricks Data Framework
+# Escoto Data Framework for Databricks Data Engineering
 
-A configuration-driven data engineering framework for Databricks. Datasets are onboarded by writing a workflow YAML, not by writing Python.
+A configuration-driven data platform for quick data onboarding and processing on Databricks. Datasets are onboarded by writing a workflow YAML, not by writing Python.
 
-Five layers, each talking to the next only through a typed `Context` and a DataFrame:
+Your data is processed by Five layers, each talking to the next only through a `Context` and a `DataFrame`:
 
 | Layer | Responsibility |
 |---|---|
-| **Start** | Flat task parameters → one validated, typed `Context`. Unknown keys are rejected. |
+| **Start** | Load and validate task configuration -> `Context`. Unknown keys are rejected. |
 | **Pipeline** | Read from the configured origin (CSV / JSON / SAS / Delta), apply pre-processors, add provenance. |
-| **Typing** | Apply the casts the config declares. Columns it does not name keep the type they arrived with. |
+| **Typing** | Apply type casting according to your configs. |
 | **Policies** | Evaluate data quality rules with `warn` or `fail` severity. |
-| **Output** | Write with a verb: `append`, `full`, `upsert`, `scd2`, `complete_delta`. |
+| **Output** | Output write with a verb: `append`, `full`, `upsert`, `scd2`, `complete_delta`. |
+
+### Built With
+
+- [![Databricks][Databricks]][Databricks-url]
+- [![Python][Python]][Python-url]
+- [![Spark][Spark]][Spark-url]
+- [![Pandas][Pandas]][Pandas-url]
 
 ## Write verbs
 
@@ -120,3 +127,17 @@ make test    # unit tests, local Spark
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+
+<!-- MARKDOWN LINKS & IMAGES -->
+
+[Databricks]: https://img.shields.io/badge/Databricks-FF3621?style=for-the-badge&logo=Databricks&logoColor=white
+[Databricks-url]: https://www.databricks.com/
+
+[Python]: https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54
+[Python-url]: https://www.python.org/
+
+[Spark]: https://img.shields.io/badge/Apache_Spark-FFFFFF?style=for-the-badge&logo=apachespark&logoColor=#E35A16
+[Spark-url]: https://spark.apache.org/
+
+[Pandas]: https://img.shields.io/badge/-Pandas-333333?style=flat&logo=pandas
+[Pandas-url]: https://pandas.pydata.org
