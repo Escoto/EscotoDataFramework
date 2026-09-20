@@ -73,8 +73,14 @@ def test_schema_location_points_at_the_resolved_hints_path(mock_spark):
 @pytest.mark.parametrize(
     "evolution,expected",
     [
-        (SchemaEvolution.FAIL, "failOnNewColumns"),
+        (SchemaEvolution.FAIL_ON_NEW_COLUMNS, "failOnNewColumns"),
         (SchemaEvolution.ADD_NEW_COLUMNS, "addNewColumns"),
+        (
+            SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
+            "addNewColumnsWithTypeWidening",
+        ),
+        (SchemaEvolution.RESCUE, "rescue"),
+        (SchemaEvolution.NONE, "none"),
     ],
 )
 def test_schema_evolution_maps_to_the_auto_loader_mode(mock_spark, evolution, expected):

@@ -46,7 +46,10 @@ source.origin: csv                # enum: csv | json | sas | delta   (required)
 source.path: /Volumes/.../inbound/      # base volume path
 source.directory: Subjects                # subdirectory
 source.file_extension: txt              # optional; defaults to origin (csv reads *.csv)
-source.schema_evolution: fail           # enum: add_new_columns | fail (default fail)
+source.schema_evolution: fail_on_new_columns  # Auto Loader's schemaEvolutionMode:
+                                        #   add_new_columns | add_new_columns_with_type_widening
+                                        #   | rescue | fail_on_new_columns (default) | none
+                                        # the last three are file origins only
 source.snapshot_time_pattern: datetime  # enum: datetime | timestamp (file-name timestamp shape)
 source.preprocessors: ""                # ordered list of registered names, e.g. "record_envelope"
 source.rename_patterns: ""              # list of regex=replacement pairs, e.g. "__[Vv]$="
@@ -66,9 +69,7 @@ typing.cast_config: /Workspace/.../subjects_cast.yml   # optional; absent → ty
 typing.validate_casts: true             # bool, default true (silent-NULL detection)
 
 # ── policies (Layer 4) ───────────────────────────────────
-policies.not_null.columns: "ID, NAME"   # optional
-policies.not_null.severity: warn        # enum: warn | fail (default warn)
-policies.schema_drift.severity: warn    # default warn; always evaluated for delta targets
+policies.checks_file: /Volumes/.../subjects_checks.yml  # optional; DQX ruleset
 
 # ── output (Layer 5) ─────────────────────────────────────
 output.verb: scd2                 # enum: append | full | upsert | scd2 | complete_delta (required)
@@ -140,7 +141,24 @@ format and fail the cast validation.
 
 Cast validation is single-pass, and framework metadata columns are exempt — a `__*` column named here is left alone, with a warning in the audit table.
 
-## 5. Worked example
+## 5. Checks file (Layer 4)
+
+Data quality rules live in their own YAML too, referenced by `policies.checks_file`, in
+[Databricks DQX](https://databrickslabs.github.io/dqx/) format:
+
+```yaml
+- criticality: error
+  check:
+    function: is_not_null
+    arguments:
+      column: ID
+```
+
+The framework reads the path and hands the contents to DQX; the check vocabulary is DQX's,
+not this framework's. See [04_policies.md](04_policies.md) for how the file is applied and
+what `criticality` means to the gate.
+
+## 6. Worked example
 
 A Bronze→Silver promotion task, carrying history with COMPLETE_DELTA and a deletes feed:
 

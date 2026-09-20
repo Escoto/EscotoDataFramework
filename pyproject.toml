@@ -19,6 +19,7 @@ dependencies = [
     "delta-spark>=3.0,<4.0",
     "pandas>=2.0,<3.0",
     "pyyaml>=6.0,<7.0",
+    "databricks-labs-dqx (>=0.16.0,<0.17.0)",
 ]
 
 [project.scripts]

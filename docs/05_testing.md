@@ -15,7 +15,7 @@ The layers are unit-testable *because* they only touch Context + DataFrame:
 | context | coercion (`"true"`/`true`, comma lists, enums), unknown-key rejection, aggregated errors, origin × verb requirements matrix, resolved names/paths |
 | pipelines | provenance columns (incl. the `__EXPORT_DATE` regex for both file-name patterns), sanitization rules, rename patterns, pre-processor registry, SAS empty-file rules |
 | typecast | YAML parsing, ordering/append semantics, missing-column error, date/timestamp formats, pass-through of undeclared columns, silent-NULL detection incl. sample capture |
-| policies | each rule's pass/fail/count/samples, runner ordering, warn-continues / fail-raises-after-all |
+| policies | ruleset parsing and DQX validation errors, result aggregation and counts, the batch handed on unchanged, warn-continues / error-raises-after-all |
 | output | every verb against in-memory Delta tables: creation path, anti-filter idempotence (re-run = no-op), close-and-insert chains, `snapshot_scope: full` expiry, deletes double-merge, UPSERT newer-wins, FULL empty-skip, watermark boundaries |
 | observability | audit row schema/partitioning, buffering + flush-on-failure, KPI event names |
 

@@ -8,11 +8,20 @@ from typing import TYPE_CHECKING, Any, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
-from data_framework.context.config import IncrementStrategy, Origin, SnapshotScope, TaskConfig
+from data_framework.context.config import (
+    FILE_ONLY_EVOLUTION,
+    FILE_ORIGINS,
+    IncrementStrategy,
+    Origin,
+    SchemaEvolution,
+    SnapshotScope,
+    TaskConfig,
+)
 from data_framework.context.context import Context, RunIdentity
 from data_framework.observability.audit_logger import AuditLogger
 from data_framework.output.registry import VERB_REQUIREMENTS
 from data_framework.pipelines.preprocessors import PREPROCESSORS
+from data_framework.policies.checks import ChecksValidationError, load_checks
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -266,6 +275,17 @@ def validate_requirements(config: TaskConfig) -> list[str]:
 
     errors.extend(_increment_errors(config, reqs, verb))
 
+    evolution = config.source.schema_evolution
+    if evolution in FILE_ONLY_EVOLUTION and config.source.origin not in FILE_ORIGINS:
+        supported = ", ".join(
+            sorted(mode.value for mode in SchemaEvolution if mode not in FILE_ONLY_EVOLUTION)
+        )
+        errors.append(
+            f"source.schema_evolution={evolution.value} is an Auto Loader mode and "
+            f"source.origin={config.source.origin.value} does not read through Auto Loader "
+            f"(supported here: {supported})"
+        )
+
     unknown = [name for name in config.source.preprocessors if name not in PREPROCESSORS]
     if unknown:
         errors.append(
@@ -301,6 +321,14 @@ def build_context(
     if the configuration is insufficient for the chosen verb.
     """
     errors = validate_requirements(config)
+
+    checks: list[dict] = []
+    if config.policies.checks_file:
+        try:
+            checks = load_checks(config.policies.checks_file)
+        except ChecksValidationError as exc:
+            errors.extend(exc.errors)
+
     if errors:
         raise ConfigValidationError(errors)
 
@@ -357,4 +385,5 @@ def build_context(
             config.source.increment_strategy
             or VERB_REQUIREMENTS[config.output.verb].increment_strategy
         ),
+        checks=checks,
     )

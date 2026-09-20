@@ -17,6 +17,7 @@ from data_framework.pipelines.enrichment import (
 )
 from data_framework.pipelines.preprocessors import apply_preprocessors
 from data_framework.pipelines.registry import SOURCES
+from data_framework.policies.runner import PolicyRunner
 from data_framework.typecast.service import CastService
 
 if TYPE_CHECKING:
@@ -38,8 +39,20 @@ def prepare(df: DataFrame, ctx: Context) -> DataFrame:
     df = sanitize_column_names(df, ctx)
     df = apply_rename_patterns(df, ctx.config.source.rename_patterns)
 
-    # P5 inserts the policy runner here, between typing and the write.
     return CastService().apply(df, ctx.config.typing, ctx)
+
+
+def _gate_and_write(df: DataFrame, ctx: Context, writer: Writer) -> None:
+    """Prepare a batch, put it through the policy gate, then write it.
+
+    The gate stays out of prepare(): prepare() is a transformation and this is an
+    action that can refuse. Keeping them apart is also what lets the gate judge exactly
+    the DataFrame the writer will receive, so refusing here means nothing for this
+    batch reaches the target.
+    """
+    prepared = prepare(df, ctx)
+    PolicyRunner().run(prepared, ctx)
+    writer.write(prepared, ctx)
 
 
 def run_pipeline(ctx: Context) -> None:
@@ -60,7 +73,7 @@ def run_pipeline(ctx: Context) -> None:
     if df.isStreaming:
         _drive_stream(df, ctx, writer)
     else:
-        writer.write(prepare(df, ctx), ctx)
+        _gate_and_write(df, ctx, writer)
 
 
 def _drive_stream(df: DataFrame, ctx: Context, writer: Writer) -> None:
@@ -70,9 +83,7 @@ def _drive_stream(df: DataFrame, ctx: Context, writer: Writer) -> None:
     so tasks reported success while the work was still running.
     """
     query = (
-        df.writeStream.foreachBatch(
-            lambda batch, _epoch_id: writer.write(prepare(batch, ctx), ctx)
-        )
+        df.writeStream.foreachBatch(lambda batch, _epoch_id: _gate_and_write(batch, ctx, writer))
         .option("checkpointLocation", ctx.checkpoint_location)
         .trigger(availableNow=True)
         .start()

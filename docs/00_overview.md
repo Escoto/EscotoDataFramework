@@ -20,7 +20,7 @@ flowchart LR
         G[Cast table / columns]
     end
     subgraph L4[4 · Policies]
-        H[DQ rules<br/>warn / fail]
+        H[DQX ruleset<br/>warn / error]
     end
     subgraph L5[5 · Output]
         I[Writer verb<br/>APPEND · FULL · UPSERT · SCD2 · COMPLETE_DELTA]
@@ -34,9 +34,9 @@ flowchart LR
 1. **Configuration over code.** A new dataset is onboarded by writing a workflow YAML, never by adding Python. Workflow YAMLs stay flat `key: value` task parameters, so Databricks Asset Bundles and YAML anchors keep working; the Start layer turns them into one validated, typed `Context`.
 2. **Layers communicate only via Context + DataFrame.** Each layer is independently testable, replaceable, and ignorant of the others' internals. No layer reads raw parameters — only the typed Context.
 3. **Verbs are layer-agnostic.** Any source origin can pair with any write verb whose declared requirements are met. Bronze→Silver APPEND or Gold→Export FULL are configurations, not new code paths. The Start layer validates each origin × verb combination and fails fast with a single aggregated error report.
-4. **Fail fast, fail loudly.** Invalid config, unknown origins, and failed `fail`-severity policies stop the task with a clear error. Nothing logs an error and then reports success.
+4. **Fail fast, fail loudly.** Invalid config, unknown origins, and failed `error`-criticality checks stop the task with a clear error. Nothing logs an error and then reports success.
 5. **Contracts are explicit.** The Silver metadata columns and the audit log table have fixed, documented shapes that downstream consumers can rely on (see Glossary below).
-6. **Extension points, not special cases.** Source-specific behavior — one vendor's JSON envelope, say — lives in named, config-selected pre-processors, never hardcoded in a generic path. Data quality engines are pluggable behind a `Policy` protocol.
+6. **Extension points, not special cases.** Source-specific behavior — one vendor's JSON envelope, say — lives in named, config-selected pre-processors, never hardcoded in a generic path. Data quality rules are declared in a DQX ruleset file, never in Python.
 7. **Deployable as a wheel.** src-layout Python package, built and deployed via Databricks Asset Bundles, executed with `python_wheel_task` entry points. No `sys.path.append`, no logic in notebooks.
 
 ## The five layers
@@ -46,7 +46,7 @@ flowchart LR
 | 1 | **Start** | `data_framework.context` | Load flat task parameters, coerce & validate into a typed `TaskConfig` (pydantic), resolve names/paths, assemble the `Context` (config + Spark session + job/run identity + logger). |
 | 2 | **Pipeline** | `data_framework.pipelines` | Produce a DataFrame from the configured origin: CSV, JSON, SAS file (via Auto Loader) or Delta table. Apply named pre-processors, provenance columns, column-name sanitization. |
 | 3 | **Typing** | `data_framework.typecast` | Apply the casts the config declares — type plus optional date/timestamp format — and validate that none of them silently produced NULL. Columns the config does not name keep the type they arrived with. |
-| 4 | **Policies** | `data_framework.policies` | Evaluate data quality rules against the dataset with `warn` or `fail` severity; results go to the audit log. |
+| 4 | **Policies** | `data_framework.policies` | Gate the dataset on a [Databricks DQX](https://databrickslabs.github.io/dqx/) ruleset: `warn` is logged and passes, `error` refuses the batch. Results go to the audit log. |
 | 5 | **Output** | `data_framework.output` | Write the dataset with a verb: APPEND, FULL, UPSERT, SCD2, COMPLETE_DELTA — to Delta tables (implemented) or files (interface specified). |
 
 Cross-cutting: `data_framework.observability` (audit/KPI logging) and `data_framework.entrypoints` (wheel entry points).
@@ -74,6 +74,6 @@ Cross-cutting: `data_framework.observability` (audit/KPI logging) and `data_fram
 | [01_architecture.md](01_architecture.md) | Layer-by-layer architecture, protocols, execution flow, extension points |
 | [02_config_schema.md](02_config_schema.md) | The typed configuration schema, parameter by parameter |
 | [03_write_verbs.md](03_write_verbs.md) | Verb semantics with worked examples (incl. COMPLETE_DELTA snapshot replay) |
-| [04_policies.md](04_policies.md) | Data quality policy interface, native rules, DQX extension point |
+| [04_policies.md](04_policies.md) | The data quality gate and how the DQX ruleset drives it |
 | [05_testing.md](05_testing.md) | Unit and platform testing strategy |
 | [06_roadmap.md](06_roadmap.md) | Phased implementation plan and current status |

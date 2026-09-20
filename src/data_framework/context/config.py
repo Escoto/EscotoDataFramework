@@ -28,8 +28,24 @@ class Verb(StrEnum):
 
 
 class SchemaEvolution(StrEnum):
+    """Auto Loader's cloudFiles.schemaEvolutionMode, one value per documented mode."""
+
     ADD_NEW_COLUMNS = "add_new_columns"
-    FAIL = "fail"
+    ADD_NEW_COLUMNS_WITH_TYPE_WIDENING = "add_new_columns_with_type_widening"
+    RESCUE = "rescue"
+    FAIL_ON_NEW_COLUMNS = "fail_on_new_columns"
+    NONE = "none"
+
+
+# Modes that only mean something to Auto Loader. A delta origin never reads through
+# cloudFiles, so choosing one there would promise behaviour that cannot happen.
+FILE_ONLY_EVOLUTION = frozenset(
+    {
+        SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
+        SchemaEvolution.RESCUE,
+        SchemaEvolution.NONE,
+    }
+)
 
 
 class SnapshotTimePattern(StrEnum):
@@ -73,7 +89,7 @@ class SourceConfig(BaseModel):
     path: Optional[str] = None
     directory: Optional[str] = None
     file_extension: Optional[str] = None
-    schema_evolution: SchemaEvolution = SchemaEvolution.FAIL
+    schema_evolution: SchemaEvolution = SchemaEvolution.FAIL_ON_NEW_COLUMNS
     snapshot_time_pattern: Optional[SnapshotTimePattern] = None
     preprocessors: list[str] = []
     rename_patterns: list[str] = []
@@ -185,18 +201,14 @@ class OutputConfig(BaseModel):
         return value
 
 
-class NotNullPolicyConfig(BaseModel):
-    columns: list[str] = []
-    severity: Severity = Severity.WARN
-
-
-class SchemaDriftPolicyConfig(BaseModel):
-    severity: Severity = Severity.WARN
-
-
 class PoliciesConfig(BaseModel):
-    not_null: Optional[NotNullPolicyConfig] = None
-    schema_drift: SchemaDriftPolicyConfig = SchemaDriftPolicyConfig()
+    """Where the data quality rules live, not what they are.
+
+    The rules themselves are a DQX ruleset in its own file; severity is a property of
+    each check there, so nothing about them belongs in the task parameters.
+    """
+
+    checks_file: Optional[str] = None
 
 
 class TypingConfig(BaseModel):

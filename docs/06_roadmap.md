@@ -57,10 +57,10 @@ Context → Pipeline/Typing → Writers → Policies → remaining origins.
 
 ## P5 — Policies layer
 
-- `policies/`: protocol, runner (evaluate-all, warn/fail), `not_null`, `schema_drift`, audit integration; DQX extension point documented in code.
-- One line in `entrypoints/pipeline.prepare()` to insert the runner between Typing and the write.
+- `policies/`: `checks.py` (read + validate the DQX ruleset at Start), `runner.py` (apply, aggregate, log, enforce `error` criticality), audit integration. No native rules: schema drift is `source.schema_evolution` plus Delta's `mergeSchema`.
+- Wire the runner between Typing and the write in `entrypoints/pipeline`, for both the batch and `foreachBatch` paths.
 
-**Exit**: policy unit tests green; a `fail`-severity violation fails a run end to end while `warn` does not.
+**Exit**: policy unit tests green; an `error`-criticality violation fails a run end to end while `warn` does not.
 
 ## P6 — Pipeline (JSON + SAS) and pre-processors
 
@@ -71,7 +71,7 @@ Context → Pipeline/Typing → Writers → Policies → remaining origins.
 ## Out of scope (explicitly deferred)
 
 - File/export writer implementations (`files.py` stays an interface).
-- A DQX adapter — the extension point is documented, the adapter is not built.
+- Quarantining invalid rows to a second target; the gate refuses the batch whole.
 - Source→Inbound retrieval, governance views, export workflows.
 
 ## Risks & mitigations

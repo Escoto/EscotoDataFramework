@@ -40,10 +40,23 @@ class EmptySourceSchemaError(Exception):
     """Raised when the target does not exist and the batch has no columns to build it."""
 
 
+# The modes under which a batch can arrive carrying a column the target lacks.
+_EVOLVING = frozenset(
+    {
+        SchemaEvolution.ADD_NEW_COLUMNS,
+        SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
+    }
+)
+
+
 def merge_schema(ctx: Context) -> str:
-    """mergeSchema follows the declared schema evolution."""
-    enabled = ctx.config.source.schema_evolution == SchemaEvolution.ADD_NEW_COLUMNS
-    return "true" if enabled else "false"
+    """mergeSchema follows the declared schema evolution.
+
+    Listed explicitly rather than compared against one mode: a mode that lets Auto
+    Loader grow the batch needs the write to accept the growth, and an equality test
+    would quietly answer "false" and refuse the very column Auto Loader just added.
+    """
+    return "true" if ctx.config.source.schema_evolution in _EVOLVING else "false"
 
 
 def as_timestamp(column: str, fmt: str | None, alias: str | None = None) -> Column:

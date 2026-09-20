@@ -16,7 +16,10 @@ _FORMAT = "csv"
 
 _EVOLUTION_MODES = {
     SchemaEvolution.ADD_NEW_COLUMNS: "addNewColumns",
-    SchemaEvolution.FAIL: "failOnNewColumns",
+    SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING: "addNewColumnsWithTypeWidening",
+    SchemaEvolution.RESCUE: "rescue",
+    SchemaEvolution.FAIL_ON_NEW_COLUMNS: "failOnNewColumns",
+    SchemaEvolution.NONE: "none",
 }
 
 _SOURCE = "CsvSource"
