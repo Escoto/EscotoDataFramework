@@ -1,0 +1,22 @@
+bundle:
+  name: data_framework_bundle
+  engine: direct
+
+include:
+  - resources/platform_tests/*.yml
+  - resources/*.yml
+
+artifacts:
+  data_framework_wheel:
+    type: whl
+    build: poetry build
+    path: .
+
+targets:
+  dev_01:
+    mode: development
+    default: true
+    workspace:
+      # The profile name only, never a workspace URL: the host comes from
+      # this profile's config at in the local ~/.databrickscfg.
+      profile: EscotoDataFramework

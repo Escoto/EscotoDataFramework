@@ -1,0 +1,214 @@
+"""Pydantic models for the typed TaskConfig and nested sub-models."""
+
+from __future__ import annotations
+
+import re
+from enum import StrEnum
+from typing import Optional
+
+from pydantic import BaseModel, field_validator, model_validator
+
+
+class Origin(StrEnum):
+    CSV = "csv"
+    JSON = "json"
+    SAS = "sas"
+    DELTA = "delta"
+
+
+FILE_ORIGINS = frozenset({Origin.CSV, Origin.JSON, Origin.SAS})
+
+
+class Verb(StrEnum):
+    APPEND = "append"
+    FULL = "full"
+    UPSERT = "upsert"
+    SCD2 = "scd2"
+    COMPLETE_DELTA = "complete_delta"
+
+
+class SchemaEvolution(StrEnum):
+    ADD_NEW_COLUMNS = "add_new_columns"
+    FAIL = "fail"
+
+
+class SnapshotTimePattern(StrEnum):
+    DATETIME = "datetime"
+    TIMESTAMP = "timestamp"
+
+
+class IncrementStrategy(StrEnum):
+    CHECKPOINT = "checkpoint"
+    WATERMARK = "watermark"
+    LATEST_SNAPSHOT = "latest_snapshot"
+
+
+class Severity(StrEnum):
+    WARN = "warn"
+    FAIL = "fail"
+
+
+class SnapshotScope(StrEnum):
+    DELTA = "delta"
+    FULL = "full"
+
+
+class EventTimeConfig(BaseModel):
+    """A date column, plus the format to parse it with when it is stored as a string."""
+
+    column: str
+    format: Optional[str] = None
+
+
+class SourceOptions(BaseModel):
+    header: bool = True
+    delimiter: str = ","
+    quote: str = '"'
+    escape: str = "\\"
+    multiline: bool = True
+
+
+class SourceConfig(BaseModel):
+    origin: Origin
+    path: Optional[str] = None
+    directory: Optional[str] = None
+    file_extension: Optional[str] = None
+    schema_evolution: SchemaEvolution = SchemaEvolution.FAIL
+    snapshot_time_pattern: Optional[SnapshotTimePattern] = None
+    preprocessors: list[str] = []
+    rename_patterns: list[str] = []
+    options: SourceOptions = SourceOptions()
+    schema_name: Optional[str] = None
+    table: Optional[str] = None
+    deletes_table: Optional[str] = None
+
+    # Each verb declares which strategies it supports and which is its default
+    # (output/base.py); this only picks between them, and only where the verb
+    # allows more than one. build_context resolves the result onto the Context.
+    increment_strategy: Optional[IncrementStrategy] = None
+
+    # The column the watermark compares. Defaults to __EXPORT_DATE, which tracks
+    # when a file arrived; point it at a per-record date instead when the source
+    # sends unchanged snapshots, so an idle run reads nothing rather than the
+    # whole backlog since the target last changed.
+    increment_anchor: Optional[EventTimeConfig] = None
+
+    @model_validator(mode="after")
+    def _require_fields_for_origin(self) -> "SourceConfig":
+        """Fail here rather than resolving Context paths to None downstream."""
+        problems: list[str] = []
+
+        if self.origin in FILE_ORIGINS:
+            missing = [
+                name
+                for name, value in (
+                    ("source.path", self.path),
+                    ("source.directory", self.directory),
+                )
+                if not value
+            ]
+        else:
+            missing = [
+                name
+                for name, value in (
+                    ("source.schema_name", self.schema_name),
+                    ("source.table", self.table),
+                )
+                if not value
+            ]
+        if missing:
+            problems.append(f"source.origin={self.origin.value} requires: {', '.join(missing)}")
+
+        if self.deletes_table and self.origin != Origin.DELTA:
+            problems.append("source.deletes_table requires source.origin=delta")
+
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+    @field_validator("rename_patterns")
+    @classmethod
+    def _patterns_are_regex_and_replacement(cls, patterns: list[str]) -> list[str]:
+        """Each entry is 'regex=replacement'.
+
+        Without the '=' check a typo silently means "delete every match", and an
+        invalid regex would only surface once the pipeline reaches enrichment.
+        """
+        problems: list[str] = []
+        for pattern in patterns:
+            if "=" not in pattern:
+                problems.append(f"'{pattern}' is missing '='")
+                continue
+            regex = pattern.split("=", 1)[0]
+            try:
+                re.compile(regex)
+            except re.error as exc:
+                problems.append(f"'{regex}' is not a valid regex ({exc})")
+        if problems:
+            raise ValueError("; ".join(problems))
+        return patterns
+
+
+class DedupConfig(BaseModel):
+    enabled: bool = False
+    columns: list[str] = []
+    order_by: Optional[str] = None
+    order_by_format: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_order_by_when_enabled(self) -> "DedupConfig":
+        if self.enabled and not self.order_by:
+            raise ValueError("output.dedup.enabled=true requires output.dedup.order_by")
+        return self
+
+
+class DeletesConfig(BaseModel):
+    keys: list[str] = []
+    event_time: Optional[EventTimeConfig] = None
+
+
+class OutputConfig(BaseModel):
+    verb: Verb
+    schema_name: str
+    table: str
+    keys: list[str] = []
+    event_time: Optional[EventTimeConfig] = None
+    snapshot_scope: SnapshotScope = SnapshotScope.DELTA
+    dedup: DedupConfig = DedupConfig()
+    deletes: Optional[DeletesConfig] = None
+
+    @field_validator("table")
+    @classmethod
+    def _table_must_be_uppercase(cls, value: str) -> str:
+        if value != value.upper():
+            raise ValueError(f"table names must be UPPERCASE, got '{value}'")
+        return value
+
+
+class NotNullPolicyConfig(BaseModel):
+    columns: list[str] = []
+    severity: Severity = Severity.WARN
+
+
+class SchemaDriftPolicyConfig(BaseModel):
+    severity: Severity = Severity.WARN
+
+
+class PoliciesConfig(BaseModel):
+    not_null: Optional[NotNullPolicyConfig] = None
+    schema_drift: SchemaDriftPolicyConfig = SchemaDriftPolicyConfig()
+
+
+class TypingConfig(BaseModel):
+    cast_config: Optional[str] = None
+    validate_casts: bool = True
+
+
+class TaskConfig(BaseModel):
+    catalog: str
+    env: str
+    metadata_path: str
+    source: SourceConfig
+    typing: TypingConfig = TypingConfig()
+    policies: PoliciesConfig = PoliciesConfig()
+    output: OutputConfig

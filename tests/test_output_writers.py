@@ -1,0 +1,221 @@
+"""Tests for the P3 write verbs against a local Delta table."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from unittest.mock import MagicMock
+
+import pytest
+
+from data_framework.context.config import (
+    DedupConfig,
+    EventTimeConfig,
+    IncrementStrategy,
+    Origin,
+    OutputConfig,
+    SourceConfig,
+    TaskConfig,
+    Verb,
+)
+from data_framework.context.context import Context, RunIdentity
+from data_framework.output.delta.append import AppendWriter
+from data_framework.output.delta.full import FullWriter
+from data_framework.output.delta.upsert import UpsertWriter
+from data_framework.output.mechanics import EmptySourceSchemaError
+
+RUN = RunIdentity(
+    workflow_id="wf-1",
+    workflow_run_id="wfrun-1",
+    task_key="write",
+    task_run_id="taskrun-1",
+)
+
+PEOPLE = "ID string, NAME string, UPDATED string"
+
+
+@pytest.fixture
+def database(spark):
+    name = f"test_write_{uuid.uuid4().hex[:8]}"
+    spark.sql(f"CREATE DATABASE IF NOT EXISTS `{name}`")
+    yield name
+    spark.sql(f"DROP DATABASE IF EXISTS `{name}` CASCADE")
+
+
+def _ctx(spark, database, verb=Verb.APPEND, **output_overrides):
+    output = dict(verb=verb, schema_name="silver", table="TARGET")
+    output.update(output_overrides)
+    config = TaskConfig(
+        catalog="cro",
+        env="dev_01",
+        metadata_path="/Volumes/meta/",
+        source=SourceConfig(origin=Origin.CSV, path="/Volumes/in/", directory="people"),
+        output=OutputConfig(**output),
+    )
+    return Context(
+        config=config,
+        spark=spark,
+        run=RUN,
+        logger=MagicMock(),
+        catalog="cro_dev_01",
+        source_table=None,
+        deletes_table=None,
+        target_table=f"`{database}`.`TARGET`",
+        inbound_glob="/Volumes/in/people/*.csv",
+        checkpoint_location="/tmp/cp/",
+        schema_hints_location="/tmp/hints/",
+        increment_strategy=IncrementStrategy.CHECKPOINT,
+    )
+
+
+def _rows(spark, database):
+    return {(row["ID"], row["NAME"]) for row in spark.table(f"`{database}`.`TARGET`").collect()}
+
+
+def _people(spark, rows):
+    return spark.createDataFrame(rows, PEOPLE)
+
+
+# --- APPEND ----------------------------------------------------------------
+
+
+def test_append_creates_the_target_on_first_write(spark, database):
+    ctx = _ctx(spark, database)
+
+    AppendWriter().write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    assert _rows(spark, database) == {("1", "alice")}
+
+
+def test_append_accumulates_across_writes(spark, database):
+    ctx = _ctx(spark, database)
+    writer = AppendWriter()
+
+    writer.write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+    writer.write(_people(spark, [("2", "bob", "2024-01-02")]), ctx)
+
+    assert _rows(spark, database) == {("1", "alice"), ("2", "bob")}
+
+
+def test_append_reports_the_rows_it_wrote(spark, database):
+    ctx = _ctx(spark, database)
+
+    AppendWriter().write(_people(spark, [("1", "a", "x"), ("2", "b", "y")]), ctx)
+
+    kpi = ctx.logger.kpi.call_args
+    assert kpi.kwargs["name"] == "rows_appended"
+    assert kpi.kwargs["total"] == 2
+
+
+def test_a_columnless_batch_cannot_create_a_target(spark, database):
+    """A target cannot be created from a batch with no schema to create it from."""
+    ctx = _ctx(spark, database)
+
+    with pytest.raises(EmptySourceSchemaError, match="no columns"):
+        AppendWriter().write(spark.range(0).drop("id"), ctx)
+
+
+# --- FULL ------------------------------------------------------------------
+
+
+def test_full_replaces_the_target(spark, database):
+    ctx = _ctx(spark, database, verb=Verb.FULL)
+    writer = FullWriter()
+
+    writer.write(_people(spark, [("1", "alice", "x")]), ctx)
+    writer.write(_people(spark, [("2", "bob", "y")]), ctx)
+
+    assert _rows(spark, database) == {("2", "bob")}
+
+
+def test_full_never_wipes_the_target_with_an_empty_batch(spark, database):
+    """A missing export must not destroy yesterday's data."""
+    ctx = _ctx(spark, database, verb=Verb.FULL)
+    writer = FullWriter()
+    writer.write(_people(spark, [("1", "alice", "x")]), ctx)
+
+    writer.write(_people(spark, []), ctx)
+
+    assert _rows(spark, database) == {("1", "alice")}
+    assert ctx.logger.warning.call_args.kwargs["name"] == "full_load_skipped"
+
+
+# --- UPSERT ----------------------------------------------------------------
+
+
+def _upsert_ctx(spark, database, **overrides):
+    defaults = dict(verb=Verb.UPSERT, keys=["ID"])
+    defaults.update(overrides)
+    return _ctx(spark, database, **defaults)
+
+
+def test_upsert_creates_the_target_on_first_write(spark, database):
+    ctx = _upsert_ctx(spark, database)
+
+    UpsertWriter().write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    assert _rows(spark, database) == {("1", "alice")}
+
+
+def test_upsert_updates_a_matched_key_and_inserts_a_new_one(spark, database):
+    ctx = _upsert_ctx(spark, database)
+    writer = UpsertWriter()
+    writer.write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    writer.write(_people(spark, [("1", "ALICE", "2024-01-02"), ("2", "bob", "2024-01-02")]), ctx)
+
+    assert _rows(spark, database) == {("1", "ALICE"), ("2", "bob")}
+
+
+def test_upsert_keeps_the_target_when_the_batch_is_older(spark, database):
+    """Newer-wins: a late-arriving old version must not overwrite a newer one."""
+    ctx = _upsert_ctx(spark, database, event_time=EventTimeConfig(column="UPDATED"))
+    writer = UpsertWriter()
+    writer.write(_people(spark, [("1", "current", "2024-06-01")]), ctx)
+
+    writer.write(_people(spark, [("1", "stale", "2024-01-01")]), ctx)
+
+    assert _rows(spark, database) == {("1", "current")}
+
+
+def test_upsert_applies_a_newer_batch(spark, database):
+    ctx = _upsert_ctx(spark, database, event_time=EventTimeConfig(column="UPDATED"))
+    writer = UpsertWriter()
+    writer.write(_people(spark, [("1", "old", "2024-01-01")]), ctx)
+
+    writer.write(_people(spark, [("1", "fresh", "2024-06-01")]), ctx)
+
+    assert _rows(spark, database) == {("1", "fresh")}
+
+
+def test_upsert_without_an_event_time_lets_the_batch_win(spark, database):
+    ctx = _upsert_ctx(spark, database)
+    writer = UpsertWriter()
+    writer.write(_people(spark, [("1", "first", "2024-06-01")]), ctx)
+
+    writer.write(_people(spark, [("1", "second", "2024-01-01")]), ctx)
+
+    assert _rows(spark, database) == {("1", "second")}
+
+
+def test_upsert_collapses_duplicate_keys_within_one_batch(spark, database):
+    ctx = _upsert_ctx(
+        spark,
+        database,
+        dedup=DedupConfig(enabled=True, columns=["ID"], order_by="UPDATED"),
+    )
+
+    UpsertWriter().write(
+        _people(spark, [("1", "old", "2024-01-01"), ("1", "new", "2024-06-01")]), ctx
+    )
+
+    assert _rows(spark, database) == {("1", "new")}
+
+
+def test_upsert_stamps_the_write_time(spark, database):
+    ctx = _upsert_ctx(spark, database)
+
+    UpsertWriter().write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    row = spark.table(f"`{database}`.`TARGET`").collect()[0]
+    assert isinstance(row["__SILVER_LAST_MODIFIED_DT"], datetime)
