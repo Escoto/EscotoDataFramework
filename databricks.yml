@@ -9,7 +9,9 @@ include:
 artifacts:
   data_framework_wheel:
     type: whl
-    build: poetry build
+    # --clean empties dist/ first. The task libraries glob dist/*.whl, so a wheel left
+    # over from an earlier version would be picked up instead of the one just built.
+    build: poetry build --clean
     path: .
 
 targets:

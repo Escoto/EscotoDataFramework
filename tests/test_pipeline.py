@@ -154,7 +154,7 @@ def test_a_streaming_source_is_driven_and_awaited():
     chain.return_value.start.return_value.awaitTermination.assert_called_once()
 
 
-@pytest.mark.parametrize("origin", [Origin.JSON, Origin.SAS])
+@pytest.mark.parametrize("origin", [Origin.SAS])
 def test_unimplemented_origins_fail_at_read_not_at_dispatch(origin):
     """The config is valid; the reader simply is not written yet."""
     assert origin in SOURCES

@@ -12,7 +12,7 @@ from data_framework.context.config import IncrementStrategy, Origin, SnapshotSco
 from data_framework.context.context import Context, RunIdentity
 from data_framework.observability.audit_logger import AuditLogger
 from data_framework.output.registry import VERB_REQUIREMENTS
-from data_framework.pipelines.preprocessors import PREPROCESSORS
+from data_framework.pipelines.preprocessors import PREPROCESSORS, RecordEnvelope
 from data_framework.policies.checks import ChecksValidationError, load_checks
 
 if TYPE_CHECKING:
@@ -274,7 +274,31 @@ def validate_requirements(config: TaskConfig) -> list[str]:
             f"(registered: {', '.join(sorted(PREPROCESSORS))})"
         )
 
+    errors.extend(_envelope_errors(config))
+
     return errors
+
+
+def _envelope_errors(config: TaskConfig) -> list[str]:
+    """The envelope and its field list are only meaningful together.
+
+    Either half alone is a silent no-op: fields with no envelope are never read, and an
+    envelope with no fields yields a batch with no key column for the merge to run on.
+    """
+    envelope = RecordEnvelope.name in config.source.preprocessors
+    fields = config.source.envelope_fields
+
+    if fields and not envelope:
+        return [
+            f"source.envelope_fields requires source.preprocessors to include "
+            f"'{RecordEnvelope.name}'"
+        ]
+    if envelope and not fields:
+        return [
+            f"source.preprocessors='{RecordEnvelope.name}' requires source.envelope_fields "
+            "(at least the key, e.g. 'uri')"
+        ]
+    return []
 
 
 def _posix_join(*parts: str) -> str:
