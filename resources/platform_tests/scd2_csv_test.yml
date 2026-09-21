@@ -26,6 +26,9 @@ bronze_check: &bronze_check ${workspace.file_path}/platform_tests/scd2_csv_test/
 silver_check: &silver_check ${workspace.file_path}/platform_tests/scd2_csv_test/3_validate_silver.py
 history_check: &history_check ${workspace.file_path}/platform_tests/scd2_csv_test/4_validate_silver_history.py
 
+# Using shared check for ID uniqueness
+checks_file: &checks_file ${workspace.file_path}/resources/platform_tests/qa_checks/reusable_unique_id_check.yml
+
 catalog: &catalog testing
 bronze_table: &bronze_table SCD2_CSV_BRONZE_1
 silver_table: &silver_table SCD2_CSV_SILVER_1
@@ -51,6 +54,7 @@ silver_params: &silver_params
   source.origin: delta
   source.schema_name: *schema
   source.table: *bronze_table
+  policies.checks_file: *checks_file
   output.verb: scd2
   output.schema_name: *schema
   output.table: *silver_table
