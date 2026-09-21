@@ -43,7 +43,7 @@ def test_happy_path_full():
         "source.options.escape": "\\",
         "source.options.multiline": "false",
         "source.file_extension": ".csv",
-        "source.schema_evolution": "add_new_columns",
+        "schema_evolution": "add_new_columns",
         "source.snapshot_time_pattern": "datetime",
         "source.preprocessors": "trim, upper",
         "source.rename_patterns": "_OLD$=_NEW, ^FOO_=",
@@ -62,16 +62,14 @@ def test_happy_path_full():
         "output.deletes.event_time.format": "yyyy-MM-dd HH:mm:ss",
         "typing.cast_config": "/Volumes/casts/agents.yml",
         "typing.validate_casts": "false",
-        "policies.not_null.columns": "ID, NAME",
-        "policies.not_null.severity": "fail",
-        "policies.schema_drift.severity": "fail",
+        "policies.checks_file": "/Volumes/meta/checks/AGENTS.yml",
     }
     config = load_config(params)
     assert config.source.options.header is False
     assert config.source.options.delimiter == "|"
     assert config.source.options.multiline is False
     assert config.source.file_extension == ".csv"
-    assert config.source.schema_evolution.value == "add_new_columns"
+    assert config.schema_evolution.value == "add_new_columns"
     assert config.source.snapshot_time_pattern.value == "datetime"
     assert config.source.preprocessors == ["trim", "upper"]
     assert config.source.rename_patterns == ["_OLD$=_NEW", "^FOO_="]
@@ -88,9 +86,7 @@ def test_happy_path_full():
     assert config.output.deletes.event_time.format == "yyyy-MM-dd HH:mm:ss"
     assert config.typing.cast_config == "/Volumes/casts/agents.yml"
     assert config.typing.validate_casts is False
-    assert config.policies.not_null.columns == ["ID", "NAME"]
-    assert config.policies.not_null.severity.value == "fail"
-    assert config.policies.schema_drift.severity.value == "fail"
+    assert config.policies.checks_file == "/Volumes/meta/checks/AGENTS.yml"
 
 
 def test_dotted_key_splitting():
@@ -183,7 +179,8 @@ def test_nested_model_defaults():
     assert config.output.dedup.enabled is False
     assert config.output.dedup.columns == []
     assert config.typing.validate_casts is True
-    assert config.policies.schema_drift.severity.value == "warn"
+    assert config.policies.checks_file is None
+    assert config.schema_evolution.value == "fail_on_new_columns"
 
 
 def test_dedup_config():
@@ -214,15 +211,18 @@ def test_event_time_config():
 
 
 def test_policies_config():
+    """The task config names a ruleset; the rules themselves live in it."""
     params = {
         **MINIMAL_PARAMS,
-        "policies.not_null.columns": "ID, NAME",
-        "policies.not_null.severity": "fail",
+        "policies.checks_file": "/Volumes/meta/checks/AGENTS.yml",
     }
     config = load_config(params)
-    assert config.policies.not_null is not None
-    assert config.policies.not_null.columns == ["ID", "NAME"]
-    assert config.policies.not_null.severity.value == "fail"
+    assert config.policies.checks_file == "/Volumes/meta/checks/AGENTS.yml"
+
+
+def test_policies_default_to_no_ruleset():
+    config = load_config(MINIMAL_PARAMS)
+    assert config.policies.checks_file is None
 
 
 @pytest.mark.parametrize("value", ["yes", "1", "no", "tru", ""])

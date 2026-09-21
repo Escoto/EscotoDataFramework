@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -40,3 +40,7 @@ class Context:
     checkpoint_location: str
     schema_hints_location: str
     increment_strategy: IncrementStrategy
+
+    # The DQX ruleset, read and validated at Start. It rides on the Context because the
+    # runner executes inside foreachBatch, where DQX cannot reach a workspace to load it.
+    checks: list[dict[str, Any]] = field(default_factory=list)

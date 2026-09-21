@@ -14,6 +14,7 @@ from data_framework.context.config import (
     IncrementStrategy,
     Origin,
     OutputConfig,
+    SchemaEvolution,
     SourceConfig,
     TaskConfig,
     Verb,
@@ -22,7 +23,11 @@ from data_framework.context.context import Context, RunIdentity
 from data_framework.output.delta.append import AppendWriter
 from data_framework.output.delta.full import FullWriter
 from data_framework.output.delta.upsert import UpsertWriter
-from data_framework.output.mechanics import EmptySourceSchemaError
+from data_framework.output.mechanics import (
+    EmptySourceSchemaError,
+    UnexpectedColumnsError,
+    schema_auto_merge,
+)
 
 RUN = RunIdentity(
     workflow_id="wf-1",
@@ -42,13 +47,14 @@ def database(spark):
     spark.sql(f"DROP DATABASE IF EXISTS `{name}` CASCADE")
 
 
-def _ctx(spark, database, verb=Verb.APPEND, **output_overrides):
+def _ctx(spark, database, verb=Verb.APPEND, schema_evolution=None, **output_overrides):
     output = dict(verb=verb, schema_name="silver", table="TARGET")
     output.update(output_overrides)
     config = TaskConfig(
         catalog="cro",
         env="dev_01",
         metadata_path="/Volumes/meta/",
+        **({"schema_evolution": schema_evolution} if schema_evolution else {}),
         source=SourceConfig(origin=Origin.CSV, path="/Volumes/in/", directory="people"),
         output=OutputConfig(**output),
     )
@@ -219,3 +225,53 @@ def test_upsert_stamps_the_write_time(spark, database):
 
     row = spark.table(f"`{database}`.`TARGET`").collect()[0]
     assert isinstance(row["__SILVER_LAST_MODIFIED_DT"], datetime)
+
+
+# --- schema evolution: one knob, the same meaning on every verb -------------
+
+_AUTO_MERGE = "spark.databricks.delta.schema.autoMerge.enabled"
+
+WIDER = "ID string, NAME string, UPDATED string, NICKNAME string"
+
+
+def test_auto_merge_conf_is_set_from_the_knob_and_then_restored(spark, database):
+    ctx = _upsert_ctx(spark, database, schema_evolution=SchemaEvolution.ADD_NEW_COLUMNS)
+
+    assert spark.conf.get(_AUTO_MERGE, None) is None
+    with schema_auto_merge(ctx):
+        assert spark.conf.get(_AUTO_MERGE) == "true"
+    assert spark.conf.get(_AUTO_MERGE, None) is None
+
+
+def test_auto_merge_conf_restores_a_value_the_session_already_had(spark, database):
+    """A job cluster runs many tasks in one session; this must not leak into the next."""
+    spark.conf.set(_AUTO_MERGE, "true")
+    ctx = _upsert_ctx(spark, database, schema_evolution=SchemaEvolution.FAIL_ON_NEW_COLUMNS)
+    try:
+        with schema_auto_merge(ctx):
+            assert spark.conf.get(_AUTO_MERGE) == "false"
+        assert spark.conf.get(_AUTO_MERGE) == "true"
+    finally:
+        spark.conf.unset(_AUTO_MERGE)
+
+
+def test_upsert_adds_a_new_column_when_evolution_is_on(spark, database):
+    ctx = _upsert_ctx(spark, database, schema_evolution=SchemaEvolution.ADD_NEW_COLUMNS)
+    UpsertWriter().write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    wider = spark.createDataFrame([("1", "alice", "2024-01-02", "al")], WIDER)
+    UpsertWriter().write(wider, ctx)
+
+    assert "NICKNAME" in spark.table(f"`{database}`.`TARGET`").columns
+
+
+def test_upsert_refuses_a_new_column_when_evolution_is_off(spark, database):
+    """Without this the MERGE accepts the batch and silently discards the column."""
+    ctx = _upsert_ctx(spark, database, schema_evolution=SchemaEvolution.FAIL_ON_NEW_COLUMNS)
+    UpsertWriter().write(_people(spark, [("1", "alice", "2024-01-01")]), ctx)
+
+    wider = spark.createDataFrame([("1", "alice", "2024-01-02", "al")], WIDER)
+    with pytest.raises(UnexpectedColumnsError, match="NICKNAME"):
+        UpsertWriter().write(wider, ctx)
+
+    assert "NICKNAME" not in spark.table(f"`{database}`.`TARGET`").columns

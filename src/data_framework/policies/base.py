@@ -1,28 +1,25 @@
-"""Policy protocol, PolicyResult, and Severity enum."""
+"""Severity, the result shape the audit log is fed from, and the gate's exception."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+from dataclasses import dataclass
 
-if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
-
-    from data_framework.context.context import Context
+from data_framework.context.config import Severity
 
 
-class Severity(StrEnum):
-    WARN = "warn"
-    FAIL = "fail"
-
-
-@dataclass
+@dataclass(frozen=True)
 class PolicyResult:
+    """One check's verdict, in the shape the audit row needs.
+
+    Deliberately no sample rows. DQX already reports which check failed and why, and
+    copying offending source rows into the audit table would put data under a set of
+    grants that has nothing to do with the table it came from.
+    """
+
     policy: str
     passed: bool
+    severity: Severity
     failed_count: int = 0
-    samples: list[Any] = field(default_factory=list)
     details: str = ""
 
 
@@ -31,14 +28,5 @@ class PolicyViolation(Exception):
 
     def __init__(self, results: list[PolicyResult]):
         self.results = results
-        names = [r.policy for r in results]
+        names = [result.policy for result in results]
         super().__init__(f"Policy violations: {', '.join(names)}")
-
-
-@runtime_checkable
-class Policy(Protocol):
-    """A data quality rule that evaluates a DataFrame and returns a result."""
-
-    name: ClassVar[str]
-
-    def evaluate(self, df: DataFrame, ctx: Context) -> PolicyResult: ...

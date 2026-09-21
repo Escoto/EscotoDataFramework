@@ -28,6 +28,7 @@ shared_params: &shared_params
   catalog: *catalog
   env: "${bundle.target}"
   metadata_path: /Volumes/testing_${bundle.target}/functional_testing/source_data/metadata/
+  schema_evolution: fail_on_new_columns
 
 bronze_params: &bronze_params
   <<: *shared_params
@@ -47,7 +48,6 @@ silver_params: &silver_params
   output.schema_name: *schema
   output.table: *silver_table
   output.keys: ID
-  # Newer export wins, and the same column collapses duplicates inside a batch.
   output.event_time.column: __EXPORT_DATE
   output.dedup.enabled: "true"
   output.dedup.columns: ID

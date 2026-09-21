@@ -16,7 +16,10 @@ _FORMAT = "csv"
 
 _EVOLUTION_MODES = {
     SchemaEvolution.ADD_NEW_COLUMNS: "addNewColumns",
-    SchemaEvolution.FAIL: "failOnNewColumns",
+    SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING: "addNewColumnsWithTypeWidening",
+    SchemaEvolution.RESCUE: "rescue",
+    SchemaEvolution.FAIL_ON_NEW_COLUMNS: "failOnNewColumns",
+    SchemaEvolution.NONE: "none",
 }
 
 _SOURCE = "CsvSource"
@@ -36,7 +39,7 @@ def reader_options(ctx: Context) -> dict[str, str]:
     return {
         "cloudFiles.format": _FORMAT,
         "cloudFiles.schemaLocation": ctx.schema_hints_location,
-        "cloudFiles.schemaEvolutionMode": _EVOLUTION_MODES[ctx.config.source.schema_evolution],
+        "cloudFiles.schemaEvolutionMode": _EVOLUTION_MODES[ctx.config.schema_evolution],
         # A file that vanishes between listing and read must not fail the batch.
         "ignoreMissingFiles": "true",
         "header": _flag(options.header),

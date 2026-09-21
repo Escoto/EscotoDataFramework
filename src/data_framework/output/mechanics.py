@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from functools import reduce
@@ -13,6 +14,8 @@ from pyspark.sql import functions as F
 from data_framework.context.config import SchemaEvolution
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from pyspark.sql import Column, DataFrame
 
     from data_framework.context.context import Context
@@ -40,10 +43,73 @@ class EmptySourceSchemaError(Exception):
     """Raised when the target does not exist and the batch has no columns to build it."""
 
 
+class UnexpectedColumnsError(Exception):
+    """Raised when a batch carries columns the target lacks and evolution is off."""
+
+
+# The modes under which a batch can arrive carrying a column the target lacks.
+_EVOLVING = frozenset(
+    {
+        SchemaEvolution.ADD_NEW_COLUMNS,
+        SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
+    }
+)
+
+
+# Delta's MERGE ignores the mergeSchema write option; this session conf is its only
+# equivalent. Without it a MERGE does not refuse an unexpected column — it drops it.
+_AUTO_MERGE = "spark.databricks.delta.schema.autoMerge.enabled"
+
+
 def merge_schema(ctx: Context) -> str:
-    """mergeSchema follows the declared schema evolution."""
-    enabled = ctx.config.source.schema_evolution == SchemaEvolution.ADD_NEW_COLUMNS
-    return "true" if enabled else "false"
+    """mergeSchema follows the declared schema evolution.
+
+    Listed explicitly rather than compared against one mode: a mode that lets the reader
+    grow the batch needs the write to accept the growth, and an equality test would
+    quietly answer "false" and refuse the very column the reader just added.
+    """
+    return "true" if ctx.config.schema_evolution in _EVOLVING else "false"
+
+
+def require_no_new_columns(df: DataFrame, ctx: Context) -> None:
+    """Refuse a batch carrying columns the target lacks, when evolution is off.
+
+    Every other verb gets this refusal from Delta itself, because mergeSchema=false
+    rejects the write. A MERGE has no such option: with autoMerge off it accepts the
+    batch and discards the unmatched column. Checking by hand here is what makes
+    schema_evolution mean the same thing on an UPSERT as it does everywhere else.
+    """
+    if merge_schema(ctx) == "true":
+        return
+
+    existing = set(ctx.spark.table(ctx.target_table).columns)
+    unexpected = [column for column in df.columns if column not in existing]
+    if unexpected:
+        raise UnexpectedColumnsError(
+            f"{ctx.target_table} has no column "
+            + ", ".join(unexpected)
+            + f"; schema_evolution={ctx.config.schema_evolution.value} does not add them"
+        )
+
+
+@contextmanager
+def schema_auto_merge(ctx: Context) -> Iterator[None]:
+    """Apply the same evolution decision to a MERGE, then put the session back.
+
+    Restoring matters because this is session state, not a property of one write: a
+    job cluster runs many tasks in one session, and leaving the conf set would hand the
+    next task an evolution policy it never asked for. get() raises when the key was
+    never set, so the previous value is captured with a default and unset on the way out.
+    """
+    previous = ctx.spark.conf.get(_AUTO_MERGE, None)
+    ctx.spark.conf.set(_AUTO_MERGE, merge_schema(ctx))
+    try:
+        yield
+    finally:
+        if previous is None:
+            ctx.spark.conf.unset(_AUTO_MERGE)
+        else:
+            ctx.spark.conf.set(_AUTO_MERGE, previous)
 
 
 def as_timestamp(column: str, fmt: str | None, alias: str | None = None) -> Column:

@@ -23,9 +23,9 @@ data_framework/
 │   │   ├── models.py                #   CastConfiguration (column specs, formats)
 │   │   └── service.py               #   cast + single-pass silent-NULL validation
 │   ├── policies/                    # LAYER 4 — Policies
-│   │   ├── base.py                  #   Policy protocol, PolicyResult, Severity
-│   │   ├── rules.py                 #   native rules: not_null, schema_drift (more later)
-│   │   └── runner.py                #   evaluate configured policies, log, enforce fail severity
+│   │   ├── base.py                  #   PolicyResult, PolicyViolation, Severity
+│   │   ├── checks.py                #   DQX ruleset: read + validate the detached YAML
+│   │   └── runner.py                #   apply DQX checks, log, enforce error criticality
 │   ├── output/                      # LAYER 5 — Output
 │   │   ├── base.py                  #   Writer protocol + verb requirements declaration
 │   │   ├── delta/
@@ -143,19 +143,16 @@ class CastService:
 ### 3.4 Policies (`data_framework.policies`)
 
 ```python
-class Severity(StrEnum): WARN = "warn"; FAIL = "fail"
-
 @dataclass
 class PolicyResult:
-    policy: str; passed: bool; failed_count: int; samples: list[Row]; details: str
+    policy: str; passed: bool; failed_count: int; severity: Severity; details: str
 
-class Policy(Protocol):
-    name: ClassVar[str]
-    def evaluate(self, df: DataFrame, ctx: Context) -> PolicyResult: ...
+class PolicyRunner:
+    def run(self, df: DataFrame, ctx: Context) -> None: ...
 ```
 
-- The runner evaluates configured policies in order, logs every result to the audit table (WARN results as WARNING, FAIL results as ERROR), and raises `PolicyViolation` after evaluating **all** policies if any `fail`-severity rule failed.
-- Native rules shipped first: `not_null` and `schema_drift` (the added/missing-columns report), both defaulting to severity `warn`. The protocol is the extension point for Databricks DQX later ([04_policies.md](04_policies.md)).
+- Rule evaluation is delegated to [Databricks DQX](https://databrickslabs.github.io/dqx/). The layer is a **gate**: it applies the configured ruleset, aggregates DQX's `_error`/`_warning` result columns into per-check counts, logs each to the audit table, drops the result columns, and raises `PolicyViolation` after evaluating **everything** if any row carried an `error`. The DataFrame handed on is the one that arrived.
+- The ruleset is a detached YAML named by `policies.checks_file`, read and validated at Start. Nothing in this layer is native: schema drift belongs to the task-level `schema_evolution` knob, not here. Full semantics in [04_policies.md](04_policies.md).
 
 ### 3.5 Output (`data_framework.output`)
 
@@ -185,7 +182,7 @@ class Writer(Protocol):
 | Source table missing (delta origin) | `RuntimeError` before any write |
 | Target absent + empty incoming schema | Error — there is nothing to define the table from |
 | Cast silent-NULL detected | `CastException` with up-to-5 sample rows per column |
-| `fail`-severity policy failed | `PolicyViolation` after all policies evaluated |
+| `error`-criticality check failed | `PolicyViolation` after all checks evaluated |
 | Any exception | Audit buffer flushed, exception propagates, task fails |
 
 ## 6. Extension points (how the framework evolves)
@@ -194,8 +191,8 @@ class Writer(Protocol):
 |---|---|---|
 | a new file format | one `SourcePipeline` class + enum value | other pipelines, writers |
 | a vendor-specific input shape | one `PreProcessor` + registry entry | `json_source` / generic flow |
-| a new DQ rule | one `Policy` class + registry entry | the runner, writers |
-| a DQ engine (e.g. DQX) | an adapter implementing `Policy` | native rules |
+| a new DQ rule | an entry in the DQX ruleset YAML | any Python at all |
+| quarantine instead of a gate | the runner's handling of DQX's result columns | rules, writers, config |
 | a new write verb | one `Writer` + `Requirements` declaration | Start/Pipeline/Typing |
 | file export targets | implement `FileWriter` | Delta writers |
 

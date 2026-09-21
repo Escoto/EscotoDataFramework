@@ -13,6 +13,7 @@ from data_framework.context.context import Context, RunIdentity
 from data_framework.observability.audit_logger import AuditLogger
 from data_framework.output.registry import VERB_REQUIREMENTS
 from data_framework.pipelines.preprocessors import PREPROCESSORS
+from data_framework.policies.checks import ChecksValidationError, load_checks
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -301,6 +302,14 @@ def build_context(
     if the configuration is insufficient for the chosen verb.
     """
     errors = validate_requirements(config)
+
+    checks: list[dict] = []
+    if config.policies.checks_file:
+        try:
+            checks = load_checks(config.policies.checks_file)
+        except ChecksValidationError as exc:
+            errors.extend(exc.errors)
+
     if errors:
         raise ConfigValidationError(errors)
 
@@ -357,4 +366,5 @@ def build_context(
             config.source.increment_strategy
             or VERB_REQUIREMENTS[config.output.verb].increment_strategy
         ),
+        checks=checks,
     )

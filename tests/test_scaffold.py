@@ -11,7 +11,7 @@ from data_framework.context.config import (  # noqa: F401
 from data_framework.output.base import Requirements, Writer  # noqa: F401
 from data_framework.output.registry import VERB_REQUIREMENTS
 from data_framework.pipelines.base import SourcePipeline
-from data_framework.policies.base import Policy, PolicyResult, Severity
+from data_framework.policies.base import PolicyResult, Severity
 from data_framework.typecast.models import CastConfiguration
 
 
@@ -37,7 +37,7 @@ def test_cast_configuration_defaults():
 
 
 def test_policy_result():
-    result = PolicyResult(policy="not_null", passed=True)
+    result = PolicyResult(policy="id_is_null", passed=True, severity=Severity.WARN)
     assert result.passed
     assert result.failed_count == 0
 
@@ -47,4 +47,3 @@ def test_protocols_are_runtime_checkable():
         SourcePipeline, "__abstractmethods__"
     )
     assert hasattr(Writer, "__protocol_attrs__") or hasattr(Writer, "__abstractmethods__")
-    assert hasattr(Policy, "__protocol_attrs__") or hasattr(Policy, "__abstractmethods__")

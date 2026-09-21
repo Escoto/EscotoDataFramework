@@ -38,13 +38,14 @@ def mock_spark() -> MagicMock:
     return spark
 
 
-def _context(mock_spark, **source_overrides):
+def _context(mock_spark, schema_evolution=None, **source_overrides):
     source = dict(origin=Origin.CSV, path="/Volumes/in/", directory="agents")
     source.update(source_overrides)
     config = TaskConfig(
         catalog="cro",
         env="dev_01",
         metadata_path="/Volumes/meta/",
+        **({"schema_evolution": schema_evolution} if schema_evolution else {}),
         source=SourceConfig(**source),
         output=OutputConfig(verb=Verb.APPEND, schema_name="bronze_cro", table="AGENTS"),
     )
@@ -73,8 +74,14 @@ def test_schema_location_points_at_the_resolved_hints_path(mock_spark):
 @pytest.mark.parametrize(
     "evolution,expected",
     [
-        (SchemaEvolution.FAIL, "failOnNewColumns"),
+        (SchemaEvolution.FAIL_ON_NEW_COLUMNS, "failOnNewColumns"),
         (SchemaEvolution.ADD_NEW_COLUMNS, "addNewColumns"),
+        (
+            SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
+            "addNewColumnsWithTypeWidening",
+        ),
+        (SchemaEvolution.RESCUE, "rescue"),
+        (SchemaEvolution.NONE, "none"),
     ],
 )
 def test_schema_evolution_maps_to_the_auto_loader_mode(mock_spark, evolution, expected):

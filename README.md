@@ -16,7 +16,7 @@ A configuration-driven data platform for quick data onboarding and processing on
 2. [01_architecture.md](docs/01_architecture.md) — layers, protocols, execution flow, extension points
 3. [02_config_schema.md](docs/02_config_schema.md) — the typed config schema, parameter by parameter
 4. [03_write_verbs.md](docs/03_write_verbs.md) — verb semantics with worked examples
-5. [04_policies.md](docs/04_policies.md) — data quality rules and the DQX extension point
+5. [04_policies.md](docs/04_policies.md) — the data quality gate, driven by a DQX ruleset
 6. [05_testing.md](docs/05_testing.md) — unit and platform testing
 7. [06_roadmap.md](docs/06_roadmap.md) — phased implementation plan and current status
 

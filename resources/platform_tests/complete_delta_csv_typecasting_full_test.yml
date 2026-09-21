@@ -46,6 +46,7 @@ shared_params: &shared_params
   catalog: *catalog
   env: "${bundle.target}"
   metadata_path: /Volumes/testing_${bundle.target}/functional_testing/source_data/metadata/
+  schema_evolution: fail_on_new_columns
 
 bronze_params: &bronze_params
   <<: *shared_params
@@ -69,7 +70,6 @@ silver_params: &silver_params
   output.schema_name: *schema
   output.table: *silver_table
   output.keys: *milestone_keys
-  # Already a timestamp — bronze cast it. Deliberately no .format here.
   output.event_time.column: UPDATEDATE
   # The one parameter that separates this test from its `delta` twin.
   output.snapshot_scope: full
