@@ -46,10 +46,7 @@ source.origin: csv                # enum: csv | json | sas | delta   (required)
 source.path: /Volumes/.../inbound/      # base volume path
 source.directory: Subjects                # subdirectory
 source.file_extension: txt              # optional; defaults to origin (csv reads *.csv)
-source.schema_evolution: fail_on_new_columns  # Auto Loader's schemaEvolutionMode:
-                                        #   add_new_columns | add_new_columns_with_type_widening
-                                        #   | rescue | fail_on_new_columns (default) | none
-                                        # the last three are file origins only
+
 source.snapshot_time_pattern: datetime  # enum: datetime | timestamp (file-name timestamp shape)
 source.preprocessors: ""                # ordered list of registered names, e.g. "record_envelope"
 source.rename_patterns: ""              # list of regex=replacement pairs, e.g. "__[Vv]$="
@@ -63,6 +60,11 @@ source.options.multiline: true          # csv/json (default true)
 source.schema_name: bronze_main          # schema of the source table
 source.table: SUBJECTS_UPDATES          # source table
 source.deletes_table: SUBJECTS_DELETES  # optional deletes feed
+
+schema_evolution: fail_on_new_columns    # what happens when a new column shows up:
+                                        #   add_new_columns | add_new_columns_with_type_widening
+                                        #   | rescue | fail_on_new_columns (default) | none
+                                        # one knob, read and write together — see §4
 
 # ── typing (Layer 3) ─────────────────────────────────────
 typing.cast_config: /Workspace/.../subjects_cast.yml   # optional; absent → types pass through
@@ -112,7 +114,36 @@ Verbs are layer-agnostic; the Start layer enforces this matrix (each writer *dec
 Validation failures name the missing/conflicting keys, e.g.:
 `output.verb=scd2 requires: output.keys, output.event_time.column — missing: output.event_time.column`.
 
-## 4. Cast config file (Layer 3)
+## 4. Schema evolution
+
+`schema_evolution` sits at the task level rather than under `source` or `output`, because
+it is one decision with effects in both places:
+
+| It sets | Where | Effect |
+|---|---|---|
+| `cloudFiles.schemaEvolutionMode` | reader (file origins) | how Auto Loader reacts to a new column |
+| `mergeSchema` | every write | whether the target may gain a column |
+| `spark.databricks.delta.schema.autoMerge.enabled` | UPSERT's merge | the same, for a MERGE, which has no write option |
+
+Splitting it into a read setting and a write setting would let them disagree, and the
+disagreement is always a broken task: a reader told to add new columns feeding a write
+told to refuse them fails the moment the source changes. One value makes that
+unrepresentable.
+
+The values are Auto Loader's own modes; see the [Databricks
+documentation](https://docs.databricks.com/ingestion/auto-loader/schema.html) for what each
+does on the read. On the write they reduce to two outcomes: `add_new_columns` and
+`add_new_columns_with_type_widening` let the target grow, the rest refuse.
+
+Any mode is valid for any origin. A delta origin has no Auto Loader, so only the write
+half applies there; the framework works that out rather than asking.
+
+A MERGE is the one write that does not refuse an unexpected column on its own: with
+`autoMerge` off it accepts the batch and discards the column. UPSERT therefore compares
+the batch against the target itself and raises `UnexpectedColumnsError`, so
+`fail_on_new_columns` means the same thing on every verb.
+
+## 5. Cast config file (Layer 3)
 
 Column types live in their own YAML, referenced by `typing.cast_config`. A type list can be
 long, and keeping it out of the workflow config stops it from muddying the task parameters:
@@ -141,7 +172,7 @@ format and fail the cast validation.
 
 Cast validation is single-pass, and framework metadata columns are exempt — a `__*` column named here is left alone, with a warning in the audit table.
 
-## 5. Checks file (Layer 4)
+## 6. Checks file (Layer 4)
 
 Data quality rules live in their own YAML too, referenced by `policies.checks_file`, in
 [Databricks DQX](https://databrickslabs.github.io/dqx/) format:
@@ -158,7 +189,7 @@ The framework reads the path and hands the contents to DQX; the check vocabulary
 not this framework's. See [04_policies.md](04_policies.md) for how the file is applied and
 what `criticality` means to the gate.
 
-## 6. Worked example
+## 7. Worked example
 
 A Bronze→Silver promotion task, carrying history with COMPLETE_DELTA and a deletes feed:
 
@@ -196,4 +227,4 @@ nested, validated `TaskConfig` above.
 Note `output.event_time.format`. It is needed only while `UPDATEDTIME` is still a
 string. Once a cast config has typed that column, the format must be **omitted** here —
 re-parsing an already-typed timestamp with a source format yields NULL and fails cast
-validation. See §4.
+validation. See §5.

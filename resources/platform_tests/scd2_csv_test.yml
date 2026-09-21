@@ -35,6 +35,7 @@ shared_params: &shared_params
   catalog: *catalog
   env: "${bundle.target}"
   metadata_path: /Volumes/testing_${bundle.target}/functional_testing/source_data/metadata/
+  schema_evolution: fail_on_new_columns
 
 bronze_params: &bronze_params
   <<: *shared_params
@@ -54,10 +55,8 @@ silver_params: &silver_params
   output.schema_name: *schema
   output.table: *silver_table
   output.keys: ID
-  # The source's own event time, as a string bronze never typed.
   output.event_time.column: UPDATE_DATE
   output.event_time.format: MM/dd/yyyy HH:mm:ss
-  # Same column collapses duplicates inside a batch, with the same format.
   output.dedup.enabled: "true"
   output.dedup.columns: ID
   output.dedup.order_by: UPDATE_DATE

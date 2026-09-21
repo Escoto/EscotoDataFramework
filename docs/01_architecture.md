@@ -152,7 +152,7 @@ class PolicyRunner:
 ```
 
 - Rule evaluation is delegated to [Databricks DQX](https://databrickslabs.github.io/dqx/). The layer is a **gate**: it applies the configured ruleset, aggregates DQX's `_error`/`_warning` result columns into per-check counts, logs each to the audit table, drops the result columns, and raises `PolicyViolation` after evaluating **everything** if any row carried an `error`. The DataFrame handed on is the one that arrived.
-- The ruleset is a detached YAML named by `policies.checks_file`, read and validated at Start. Nothing in this layer is native: schema drift belongs to `source.schema_evolution` and Delta's `mergeSchema`, not here. Full semantics in [04_policies.md](04_policies.md).
+- The ruleset is a detached YAML named by `policies.checks_file`, read and validated at Start. Nothing in this layer is native: schema drift belongs to the task-level `schema_evolution` knob, not here. Full semantics in [04_policies.md](04_policies.md).
 
 ### 3.5 Output (`data_framework.output`)
 

@@ -40,8 +40,8 @@ def load_checks(path: str) -> list[dict]:
             ]
         )
 
-    # Static on DQEngine, so unknown functions, bad argument names and missing required
-    # parameters are all caught without a workspace client.
+    # Static on DQEngine, so this catches bad functions and arguments with no
+    # workspace client.
     status = DQEngine.validate_checks(checks)
     if status.has_errors:
         raise ChecksValidationError(

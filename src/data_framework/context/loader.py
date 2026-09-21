@@ -8,15 +8,7 @@ from typing import TYPE_CHECKING, Any, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
-from data_framework.context.config import (
-    FILE_ONLY_EVOLUTION,
-    FILE_ORIGINS,
-    IncrementStrategy,
-    Origin,
-    SchemaEvolution,
-    SnapshotScope,
-    TaskConfig,
-)
+from data_framework.context.config import IncrementStrategy, Origin, SnapshotScope, TaskConfig
 from data_framework.context.context import Context, RunIdentity
 from data_framework.observability.audit_logger import AuditLogger
 from data_framework.output.registry import VERB_REQUIREMENTS
@@ -274,17 +266,6 @@ def validate_requirements(config: TaskConfig) -> list[str]:
         errors.append(f"output.verb={verb} does not support output.snapshot_scope=full")
 
     errors.extend(_increment_errors(config, reqs, verb))
-
-    evolution = config.source.schema_evolution
-    if evolution in FILE_ONLY_EVOLUTION and config.source.origin not in FILE_ORIGINS:
-        supported = ", ".join(
-            sorted(mode.value for mode in SchemaEvolution if mode not in FILE_ONLY_EVOLUTION)
-        )
-        errors.append(
-            f"source.schema_evolution={evolution.value} is an Auto Loader mode and "
-            f"source.origin={config.source.origin.value} does not read through Auto Loader "
-            f"(supported here: {supported})"
-        )
 
     unknown = [name for name in config.source.preprocessors if name not in PREPROCESSORS]
     if unknown:

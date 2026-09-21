@@ -39,7 +39,7 @@ def reader_options(ctx: Context) -> dict[str, str]:
     return {
         "cloudFiles.format": _FORMAT,
         "cloudFiles.schemaLocation": ctx.schema_hints_location,
-        "cloudFiles.schemaEvolutionMode": _EVOLUTION_MODES[ctx.config.source.schema_evolution],
+        "cloudFiles.schemaEvolutionMode": _EVOLUTION_MODES[ctx.config.schema_evolution],
         # A file that vanishes between listing and read must not fail the batch.
         "ignoreMissingFiles": "true",
         "header": _flag(options.header),

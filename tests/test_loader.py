@@ -43,7 +43,7 @@ def test_happy_path_full():
         "source.options.escape": "\\",
         "source.options.multiline": "false",
         "source.file_extension": ".csv",
-        "source.schema_evolution": "add_new_columns",
+        "schema_evolution": "add_new_columns",
         "source.snapshot_time_pattern": "datetime",
         "source.preprocessors": "trim, upper",
         "source.rename_patterns": "_OLD$=_NEW, ^FOO_=",
@@ -69,7 +69,7 @@ def test_happy_path_full():
     assert config.source.options.delimiter == "|"
     assert config.source.options.multiline is False
     assert config.source.file_extension == ".csv"
-    assert config.source.schema_evolution.value == "add_new_columns"
+    assert config.schema_evolution.value == "add_new_columns"
     assert config.source.snapshot_time_pattern.value == "datetime"
     assert config.source.preprocessors == ["trim", "upper"]
     assert config.source.rename_patterns == ["_OLD$=_NEW", "^FOO_="]
@@ -180,7 +180,7 @@ def test_nested_model_defaults():
     assert config.output.dedup.columns == []
     assert config.typing.validate_casts is True
     assert config.policies.checks_file is None
-    assert config.source.schema_evolution.value == "fail_on_new_columns"
+    assert config.schema_evolution.value == "fail_on_new_columns"
 
 
 def test_dedup_config():

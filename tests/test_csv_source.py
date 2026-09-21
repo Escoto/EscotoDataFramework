@@ -38,13 +38,14 @@ def mock_spark() -> MagicMock:
     return spark
 
 
-def _context(mock_spark, **source_overrides):
+def _context(mock_spark, schema_evolution=None, **source_overrides):
     source = dict(origin=Origin.CSV, path="/Volumes/in/", directory="agents")
     source.update(source_overrides)
     config = TaskConfig(
         catalog="cro",
         env="dev_01",
         metadata_path="/Volumes/meta/",
+        **({"schema_evolution": schema_evolution} if schema_evolution else {}),
         source=SourceConfig(**source),
         output=OutputConfig(verb=Verb.APPEND, schema_name="bronze_cro", table="AGENTS"),
     )

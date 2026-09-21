@@ -98,10 +98,10 @@ framework to how DQX derives them.
 
 There is no native rule here, because nothing native is needed.
 
-A **new** column is already refused twice over, and by the platform rather than by us:
-`source.schema_evolution` sets Auto Loader's `cloudFiles.schemaEvolutionMode` on the read,
-and Delta's `mergeSchema` refuses an unexpected column on the write. Adding a rule for it
-would duplicate two mechanisms that already fail loudly.
+A **new** column is already handled by the task-level `schema_evolution` knob, which
+drives Auto Loader on the read and `mergeSchema`/`autoMerge` on the write
+([02_config_schema.md](02_config_schema.md) §4). Adding a rule for it would duplicate a
+mechanism that already refuses loudly.
 
 A **missing** column is a genuine gap: Delta accepts the batch and writes NULLs, at either
 `mergeSchema` setting, and no `schemaEvolutionMode` value reports it — every mode in that

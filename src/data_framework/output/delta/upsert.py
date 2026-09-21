@@ -13,6 +13,8 @@ from data_framework.output.mechanics import (
     deduplicate,
     log_rows_written,
     merge_schema,
+    require_no_new_columns,
+    schema_auto_merge,
     promote,
     require_creatable,
 )
@@ -38,20 +40,23 @@ class UpsertWriter:
             self._create(prepared, ctx)
             return
 
+        require_no_new_columns(prepared, ctx)
+
         target = DeltaTable.forName(ctx.spark, ctx.target_table)
         matched = " AND ".join(f"t.`{key}` = s.`{key}`" for key in ctx.config.output.keys)
         merge = target.alias("t").merge(prepared.alias("s"), matched)
 
-        # Schema evolution on a merge needs spark.databricks.delta.schema.autoMerge;
-        # the mergeSchema write option does not apply here. New columns on an UPSERT
-        # target are out of scope until that is configured deliberately.
         # `if newer` would evaluate the Column's truthiness, which raises.
         newer = _newer_than_target(ctx)
         if newer is None:
             merge = merge.whenMatchedUpdateAll()
         else:
             merge = merge.whenMatchedUpdateAll(condition=newer)
-        merge.whenNotMatchedInsertAll().execute()
+
+        # UpdateAll/InsertAll silently discard a column the target lacks, so the
+        # conf has to be in force for the merge itself.
+        with schema_auto_merge(ctx):
+            merge.whenNotMatchedInsertAll().execute()
 
         log_rows_written(ctx, event=_EVENT, source=_SOURCE)
 

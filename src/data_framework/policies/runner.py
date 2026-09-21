@@ -64,9 +64,8 @@ class PolicyRunner:
         """Per-check counts for everything that failed, in a single Spark job."""
         checked = _engine().apply_checks_by_metadata(df, list(ctx.checks))
 
-        # A union tagged by the column each row came from: both severities are counted
-        # in one job instead of scanning the batch once per severity. Rows that passed
-        # carry NULL rather than an empty array, and explode drops them.
+        # Tagging by source column counts both severities in one job. Passing rows
+        # carry NULL, which explode drops.
         tagged = [
             checked.select(
                 F.lit(severity.value).alias("severity"),

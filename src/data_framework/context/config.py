@@ -37,17 +37,6 @@ class SchemaEvolution(StrEnum):
     NONE = "none"
 
 
-# Modes that only mean something to Auto Loader. A delta origin never reads through
-# cloudFiles, so choosing one there would promise behaviour that cannot happen.
-FILE_ONLY_EVOLUTION = frozenset(
-    {
-        SchemaEvolution.ADD_NEW_COLUMNS_WITH_TYPE_WIDENING,
-        SchemaEvolution.RESCUE,
-        SchemaEvolution.NONE,
-    }
-)
-
-
 class SnapshotTimePattern(StrEnum):
     DATETIME = "datetime"
     TIMESTAMP = "timestamp"
@@ -89,7 +78,6 @@ class SourceConfig(BaseModel):
     path: Optional[str] = None
     directory: Optional[str] = None
     file_extension: Optional[str] = None
-    schema_evolution: SchemaEvolution = SchemaEvolution.FAIL_ON_NEW_COLUMNS
     snapshot_time_pattern: Optional[SnapshotTimePattern] = None
     preprocessors: list[str] = []
     rename_patterns: list[str] = []
@@ -220,6 +208,9 @@ class TaskConfig(BaseModel):
     catalog: str
     env: str
     metadata_path: str
+
+    # Decide how the reader and writer react to new columns.
+    schema_evolution: SchemaEvolution = SchemaEvolution.FAIL_ON_NEW_COLUMNS
     source: SourceConfig
     typing: TypingConfig = TypingConfig()
     policies: PoliciesConfig = PoliciesConfig()

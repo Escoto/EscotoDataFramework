@@ -11,7 +11,6 @@ from data_framework.context.config import (
     Origin,
     OutputConfig,
     PoliciesConfig,
-    SchemaEvolution,
     Severity,
     SourceConfig,
     TaskConfig,
@@ -19,11 +18,7 @@ from data_framework.context.config import (
     Verb,
 )
 from data_framework.context.context import RunIdentity
-from data_framework.context.loader import (
-    ConfigValidationError,
-    build_context,
-    validate_requirements,
-)
+from data_framework.context.loader import ConfigValidationError, build_context
 from data_framework.policies.base import PolicyViolation
 from data_framework.policies.checks import ChecksValidationError, load_checks
 from data_framework.policies.runner import PolicyRunner
@@ -241,32 +236,3 @@ def test_a_bad_ruleset_fails_the_task_at_start(mock_spark, tmp_path):
 
     with pytest.raises(ConfigValidationError, match="could not be read"):
         build_context(config, mock_spark, RUN)
-
-
-def test_auto_loader_only_evolution_modes_are_refused_for_delta_origins():
-    """rescue and none are Auto Loader modes; a delta origin never reaches Auto Loader."""
-    config = _config(
-        source=SourceConfig(
-            origin=Origin.DELTA,
-            schema_name="bronze_cro",
-            table="AGENTS_UPDATES",
-            schema_evolution=SchemaEvolution.RESCUE,
-        ),
-    )
-
-    errors = validate_requirements(config)
-
-    assert any("source.schema_evolution=rescue" in error for error in errors)
-
-
-def test_auto_loader_only_evolution_modes_are_accepted_for_file_origins():
-    config = _config(
-        source=SourceConfig(
-            origin=Origin.CSV,
-            path="/Volumes/in/",
-            directory="agents",
-            schema_evolution=SchemaEvolution.RESCUE,
-        ),
-    )
-
-    assert validate_requirements(config) == []

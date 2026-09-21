@@ -57,7 +57,7 @@ Context → Pipeline/Typing → Writers → Policies → remaining origins.
 
 ## P5 — Policies layer
 
-- `policies/`: `checks.py` (read + validate the DQX ruleset at Start), `runner.py` (apply, aggregate, log, enforce `error` criticality), audit integration. No native rules: schema drift is `source.schema_evolution` plus Delta's `mergeSchema`.
+- `policies/`: `checks.py` (read + validate the DQX ruleset at Start), `runner.py` (apply, aggregate, log, enforce `error` criticality), audit integration. No native rules: schema drift is the task-level `schema_evolution` knob.
 - Wire the runner between Typing and the write in `entrypoints/pipeline`, for both the batch and `foreachBatch` paths.
 
 **Exit**: policy unit tests green; an `error`-criticality violation fails a run end to end while `warn` does not.
