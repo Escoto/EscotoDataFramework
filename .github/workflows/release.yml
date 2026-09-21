@@ -1,0 +1,58 @@
+name: RELEASE
+
+permissions: write-all
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        type: choice
+        options: 
+        - patch
+        - minor
+        - major
+
+jobs:
+  release-version:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'poetry'
+
+      - name: Bump version
+        id: bump
+        run: |
+          poetry version ${{ inputs.release_type }}
+          version=$(poetry version -s)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Sync __init__.py version
+        run: |
+          sed -i "s/__version__ = \".*\"/__version__ = \"${{ steps.bump.outputs.version }}\"/" src/data_framework/__init__.py
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/data_framework/__init__.py
+          git commit -m "chore: release v${{ steps.bump.outputs.version }}"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin HEAD --tags
+
+      - name: Create GitHub release
+        run: |
+          gh release create "v${{ steps.bump.outputs.version }}" \
+            --title "v${{ steps.bump.outputs.version }}" \
+            --generate-notes

@@ -25,7 +25,9 @@ from data_framework.pipelines.preprocessors import (
 )
 
 
-def _config(names: list[str]) -> TaskConfig:
+def _config(names: list[str], fields: list[str] | None = None) -> TaskConfig:
+    if fields is None:
+        fields = ["uri"] if RecordEnvelope.name in names else []
     return TaskConfig(
         catalog="cro",
         env="dev_01",
@@ -35,6 +37,7 @@ def _config(names: list[str]) -> TaskConfig:
             path="/Volumes/in/",
             directory="agents",
             preprocessors=names,
+            envelope_fields=fields,
         ),
         output=OutputConfig(verb=Verb.APPEND, schema_name="bronze_cro", table="AGENTS"),
     )
@@ -57,9 +60,9 @@ def test_resolve_with_no_names_is_empty():
     assert resolve([]) == []
 
 
-def test_registrations_are_still_deferred_to_p6():
+def test_flatten_nested_is_still_deferred_to_p6():
     with pytest.raises(NotImplementedError, match="P6"):
-        RecordEnvelope().apply(MagicMock(), MagicMock())
+        FlattenNested().apply(MagicMock(), MagicMock())
 
 
 def test_an_unknown_name_is_rejected_at_start():

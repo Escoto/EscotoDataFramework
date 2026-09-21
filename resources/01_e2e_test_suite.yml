@@ -27,3 +27,7 @@ resources:
         - task_key: complete_delta_csv_typecasting_full_test
           run_job_task:
             job_id: ${resources.jobs.complete_delta_csv_typecasting_full_test.id}
+
+        - task_key: complete_delta_json_full_test
+          run_job_task:
+            job_id: ${resources.jobs.complete_delta_json_full_test.id}

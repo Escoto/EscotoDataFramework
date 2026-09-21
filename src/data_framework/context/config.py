@@ -72,6 +72,10 @@ class SourceOptions(BaseModel):
     escape: str = "\\"
     multiline: bool = True
 
+    # Auto Loader schema hints, e.g. "metadata STRING, data STRING". Typing a column as
+    # STRING keeps the reader out of it, so a vendor reshaping it is not a schema change.
+    schema_hints: Optional[str] = None
+
 
 class SourceConfig(BaseModel):
     origin: Origin
@@ -80,6 +84,10 @@ class SourceConfig(BaseModel):
     file_extension: Optional[str] = None
     snapshot_time_pattern: Optional[SnapshotTimePattern] = None
     preprocessors: list[str] = []
+
+    # JSON paths lifted out of each record_envelope item into their own columns. The
+    # payload itself stays whole under DATA, so only these need to be stable.
+    envelope_fields: list[str] = []
     rename_patterns: list[str] = []
     options: SourceOptions = SourceOptions()
     schema_name: Optional[str] = None
