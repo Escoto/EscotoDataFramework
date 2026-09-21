@@ -5,7 +5,7 @@ permissions: write-all
 on:
   push:
     branches:
-      - "**" # Trigger for any branch on push
+      - "**"  # Trigger for any branch on push
 
 jobs:
   test:
