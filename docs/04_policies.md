@@ -52,8 +52,11 @@ check, and DQX already models it as `criticality`.
    before anything is read.
 2. **Between Typing and Output** the runner applies the checks, which appends DQX's
    `_errors` / `_warnings` result columns to the batch.
-3. The runner aggregates those columns in one pass into per-check counts, logs each result
-   to the audit table, and **drops them**. The target table's schema never sees them.
+3. The runner aggregates those columns in one pass into per-check counts and logs each
+   result to the audit table. The checked DataFrame never leaves the runner: `run()` hands
+   back nothing and the caller writes the frame it already held, so the result columns
+   **cannot** reach the target. That is structural, not a `drop()` call that could be
+   removed by accident.
 4. If any row carries an `error`, the runner raises `PolicyViolation` — after logging
    everything, so one run reports every rule the batch broke rather than the first.
 
@@ -65,12 +68,26 @@ layer does not split, so it reinterprets:
 | DQX `criticality` | Here |
 |---|---|
 | `warn` | logged as `WARNING`; the batch is written |
-| `error` | logged as `ERROR`; `PolicyViolation` raised and the batch is not written |
+| `error` | logged as `ERROR`; the whole batch is discarded and the run stops |
 
 ### Streaming
 
 For streaming origins the runner executes inside the same `foreachBatch` as Typing and
 Output, per micro-batch.
+
+A micro-batch that trips an `error` check is discarded **whole**. `PolicyViolation` is
+raised before the writer is ever called, so nothing from that batch reaches the target —
+not the rows that passed, not a partial write — and its offsets are never committed to the
+checkpoint.
+
+The exception then propagates out of `foreachBatch` and terminates the streaming query, so
+no later micro-batch is read or evaluated: the run stops at the first batch that fails
+rather than pressing on with the rest of the backlog. It surfaces to the entry point as a
+`StreamingQueryException` wrapping the `PolicyViolation`, which records a
+`pipeline_failure` audit row and re-raises, failing the task.
+
+Micro-batches that already succeeded earlier in the same run stay committed — see
+[§6](#6-known-limitation--a-failed-batch-does-not-unwind-earlier-ones).
 
 DQX's engine requires a Databricks `WorkspaceClient`, which is not available inside
 `foreachBatch`. The ruleset is therefore read and validated **once on the driver** before

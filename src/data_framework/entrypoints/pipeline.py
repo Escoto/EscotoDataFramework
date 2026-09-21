@@ -79,8 +79,8 @@ def run_pipeline(ctx: Context) -> None:
 def _drive_stream(df: DataFrame, ctx: Context, writer: Writer) -> None:
     """Run the available data through the writer, one micro-batch at a time.
 
-    awaitTermination is not optional: starting the query and returning would let
-    so tasks reported success while the work was still running.
+    awaitTermination is not optional. Starting the query and returning
+    would end the stream unfinished without raising any error.
     """
     query = (
         df.writeStream.foreachBatch(lambda batch, _epoch_id: _gate_and_write(batch, ctx, writer))
