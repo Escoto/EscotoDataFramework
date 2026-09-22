@@ -55,9 +55,13 @@ jobs:
           git tag "v${{ steps.bump.outputs.version }}"
           git push origin HEAD:main --tags
 
+      - name: Build wheel
+        run: poetry build
+
       - name: Create GitHub release
         run: |
           gh release delete "v${{ steps.bump.outputs.version }}" -y || true
           gh release create "v${{ steps.bump.outputs.version }}" \
             --title "v${{ steps.bump.outputs.version }}" \
-            --generate-notes
+            --generate-notes \
+            dist/*.whl dist/*.tar.gz
