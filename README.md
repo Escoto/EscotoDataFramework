@@ -3,6 +3,7 @@
 A configuration-driven data engineering framework for Databricks. Onboarding a new dataset
 means writing a workflow YAML — never Python.
 
+[![CI][CI]][CI-url]
 [![Databricks][Databricks]][Databricks-url]
 [![Python][Python]][Python-url]
 [![Spark][Spark]][Spark-url]
@@ -138,6 +139,26 @@ builds the wheel, then deploys the bundle. Authenticate with a CLI profile or wi
 databricks bundle deploy
 ```
 
+## Traceability
+
+Every run writes to an audit log — not vendor telemetry, a trail in your own Databricks
+catalog (`monitoring_{env}.audit.logs`). It's not a bolt-on: `Context` carries the logger as a
+required field, and the audit write is deliberately the first thing a task does — if it can't
+land, the run fails before touching any data, rather than processing a batch it can't account
+for.
+
+Each row ties a log level and an event to the exact job, run and task that produced it:
+
+| | Columns |
+|---|---|
+| What ran | `name`, `source` |
+| When | `__workflow_id` / `__workflow_run_id`, `__task_key` / `__task_run_id`, `time_stamp` |
+| Where | `catalog`, `schema`, `table` |
+| Outcome | `type` (INFO / WARNING / ERROR), `total`, `description`, `metadata` |
+
+Nothing leaves the workspace, and there's no flag to turn it off. Full contract:
+[00_overview.md](docs/00_overview.md#glossary).
+
 ## Status
 
 Start, Pipeline (CSV + JSON + Delta), Typing, Policies (DQX), and all five write verbs are
@@ -149,6 +170,9 @@ implemented and tested. The SAS origin is not implemented yet. Full phase-by-pha
 Apache 2.0 — see [LICENSE](LICENSE).
 
 <!-- MARKDOWN LINKS & IMAGES -->
+
+[CI]: https://github.com/Escoto/EscotoDataFramework/actions/workflows/on_push.yml/badge.svg
+[CI-url]: https://github.com/Escoto/EscotoDataFramework/actions/workflows/on_push.yml
 
 [Databricks]: https://img.shields.io/badge/Databricks-FF3621?style=for-the-badge&logo=Databricks&logoColor=white
 [Databricks-url]: https://www.databricks.com/
