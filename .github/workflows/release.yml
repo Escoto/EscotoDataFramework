@@ -43,17 +43,20 @@ jobs:
         run: |
           sed -i "s/__version__ = \".*\"/__version__ = \"${{ steps.bump.outputs.version }}\"/" src/data_framework/__init__.py
 
-      - name: Commit version bump
+      - name: Commit version bump to release branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release/v${{ steps.bump.outputs.version }}"
           git add pyproject.toml src/data_framework/__init__.py
           git commit -m "chore: release v${{ steps.bump.outputs.version }}"
-          git tag "v${{ steps.bump.outputs.version }}"
-          git push origin HEAD --tags
+          git push origin "release/v${{ steps.bump.outputs.version }}"
 
-      - name: Create GitHub release
+      - name: Open release PR and enable auto-merge
         run: |
-          gh release create "v${{ steps.bump.outputs.version }}" \
-            --title "v${{ steps.bump.outputs.version }}" \
-            --generate-notes
+          pr_url=$(gh pr create \
+            --base main \
+            --head "release/v${{ steps.bump.outputs.version }}" \
+            --title "chore: release v${{ steps.bump.outputs.version }}" \
+            --body "Automated version bump to v${{ steps.bump.outputs.version }}. Tag and GitHub release are created automatically once this merges.")
+          gh pr merge "$pr_url" --auto --squash
