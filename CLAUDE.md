@@ -1,6 +1,14 @@
 # CLAUDE.md
 
-Guidance for Claude Code (claude.ai/code) when working in this repository.
+Remember to keep your answers short and concise. An accurate summary is more meaningful than a lengthy and verbose explanation. 
+
+## Project Overview
+
+This is a configuration-driven Data Processing Framework for ingesting data into Databricks.
+The framework supports a multi-layer medallion architecture (Source → Inbound → Bronze → Silver → Gold) and 
+is deployed via Databricks Declarative Automation Bundles (Previously Databricks Asset Bundles).
+
+**Tech Stack**: Python 3.11, PySpark 15.4.x-scala2.12, Databricks, Delta Lake, DQX, Pandas
 
 ## Running anything
 
@@ -23,7 +31,7 @@ Python is 3.11 — matching Databricks Runtime 15.4 LTS. Invoke it as `python`, 
 - Keep implementations as simple as the problem allows.
 - Comments explain *why*, not *what*. A comment that restates the code earns its deletion.
 - This is a greenfield project. It has no predecessor to stay compatible with, so
-  "parity" is never a reason to do something.
+  "parity" is never a reason to do (or not to do) something.
 
 ## Architecture
 
