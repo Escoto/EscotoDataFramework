@@ -17,12 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'Escoto'
     env:
-      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
     steps:
       - name: checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Install Poetry
         run: pipx install poetry
