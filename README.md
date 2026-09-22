@@ -4,6 +4,7 @@ A configuration-driven data engineering framework for Databricks. Onboarding a n
 means writing a workflow YAML — never Python.
 
 [![CI][CI]][CI-url]
+
 [![Databricks][Databricks]][Databricks-url]
 [![Python][Python]][Python-url]
 [![Spark][Spark]][Spark-url]
