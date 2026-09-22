@@ -3,8 +3,8 @@ bundle:
   engine: direct
 
 include:
-  - resources/platform_tests/*.yml
-  - resources/*.yml
+  - workflows/platform_tests/*.yml
+  - workflows/*.yml
 
 artifacts:
   data_framework_wheel:
