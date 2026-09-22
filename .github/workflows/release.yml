@@ -47,6 +47,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push origin --delete "release/v${{ steps.bump.outputs.version }}" || true
           git checkout -b "release/v${{ steps.bump.outputs.version }}"
           git add pyproject.toml src/data_framework/__init__.py
           git commit -m "chore: release v${{ steps.bump.outputs.version }}"
