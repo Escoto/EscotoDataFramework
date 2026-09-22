@@ -15,6 +15,7 @@ on:
 jobs:
   release-version:
     runs-on: ubuntu-latest
+    if: github.actor == 'Escoto'
     env:
       GITHUB_TOKEN: ${{ github.token }}
     steps:

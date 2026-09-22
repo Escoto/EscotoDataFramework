@@ -1,6 +1,6 @@
 # End-to-end platform test: JSON (full + delta feeds) → two Bronze → one Silver.
 #
-# This is the production MDM shape. A vendor sends the same business object as two
+# This is the production shape. A vendor sends the same business object as two
 # feeds: a full export that re-asserts the whole dataset, and a delta export carrying
 # only what moved. They are tracked as separate inbound directories into separate
 # bronze tables, and only ever meet in silver.
@@ -13,9 +13,9 @@
 # The records live under a "data" array inside a JSON envelope, so bronze is
 # row-per-item rather than row-per-file. record_envelope does that unwrapping:
 # source.envelope_fields names the keys lifted into their own columns, and the whole
-# item stays under DATA as JSON text. MDM reshapes its payloads without warning, and
-# the schema hints keep the reader out of the payload entirely — only the keys named
-# here have to stay stable.
+# item stays under DATA as JSON text. Vendors reshape payloads without warning, and
+# what this proves is that two feeds inferring different payload schemas still land in
+# one silver table whose own columns stay as expected.
 
 base: &base ${workspace.file_path}/platform_tests/complete_delta_json_full_test
 cleanup_script: &cleanup_script ${workspace.file_path}/platform_tests/complete_delta_json_full_test/0_cleanup.py
@@ -42,9 +42,6 @@ bronze_params: &bronze_params
   <<: *shared_params
   source.origin: json
   source.path: /Volumes/testing_${bundle.target}/functional_testing/source_data/inbound/
-  # Typing both envelope halves as STRING keeps Auto Loader out of the payload, so a
-  # vendor reshaping an item is not a schema change.
-  # source.options.schema_hints: metadata STRING, data STRING
   source.preprocessors: record_envelope
   # Lifted into columns of their own; everything else stays inside DATA.
   source.envelope_fields: uri, status

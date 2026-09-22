@@ -32,7 +32,7 @@ On Windows, run this from WSL — Spark does not run natively on Windows.
 
 Each platform test is a deployed job that builds its own fixtures from nothing, runs the
 framework over them, and asserts the result. They live in two halves: the workflow YAML in
-`resources/platform_tests/` and the scripts in `platform_tests/<test_name>/`.
+`workflows/platform_tests/` and the scripts in `platform_tests/<test_name>/`.
 
 Every one follows the same shape:
 
