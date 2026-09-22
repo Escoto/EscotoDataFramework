@@ -1,14 +1,66 @@
-# Escoto Data Framework for Databricks Data Engineering
+# Escoto Data Framework
 
-A configuration-driven data platform for quick data onboarding and processing on Databricks. Datasets are onboarded by writing a workflow YAML, not by writing Python.
+A configuration-driven data engineering framework for Databricks. Onboarding a new dataset
+means writing a workflow YAML — never Python.
 
-### Built With
+[![Databricks][Databricks]][Databricks-url]
+[![Python][Python]][Python-url]
+[![Spark][Spark]][Spark-url]
+[![DQX][DQX]][DQX-url]
+[![License][License]][License-url]
 
-- [![Databricks][Databricks]][Databricks-url]
-- [![Python][Python]][Python-url]
-- [![Spark][Spark]][Spark-url]
-- [![Pandas][Pandas]][Pandas-url]
+## Why
 
+Most Databricks pipelines grow one notebook per dataset. This framework inverts that: a
+single typed engine reads a workflow YAML and carries every dataset through the same five
+layers — Start, Pipeline, Typing, Policies, Output. A new source is a new YAML file, not a
+new code path.
+
+The project is **alpha** — see [Status](#status) for what's implemented today.
+
+## Key Capabilities
+
+- **Config-driven onboarding** — declare an origin, a write verb and a target; the framework
+  validates the combination and runs it. No per-dataset Python.
+- **Five typed layers** — Start → Pipeline → Typing → Policies → Output, each reachable only
+  through a typed `Context` and a DataFrame, so every layer is independently testable.
+- **Five write verbs** — `APPEND`, `FULL`, `UPSERT`, `SCD2`, `COMPLETE_DELTA` — layer-agnostic,
+  so the same verb serves Bronze→Silver or Gold→Export.
+- **A data quality gate, not a bolt-on** — every batch is checked against a
+  [Databricks DQX](https://databrickslabs.github.io/dqx/) ruleset before it's written;
+  `error` refuses the batch, `warn` logs and lets it through.
+- **Fail fast, fail loud** — invalid config, unknown origins, and failed checks stop the run
+  with one aggregated error report. Nothing logs an error and reports success.
+- **Ships as a wheel** — src-layout package deployed via Databricks Asset Bundles and run
+  through `python_wheel_task` entry points. No notebook logic, no `sys.path` hacks.
+
+## Quick Look
+
+Two tasks, two YAML blocks — CSV into Bronze, then Bronze into Silver with SCD Type 1
+upsert on `CLAIM_ID`:
+
+```yaml
+# Inbound → Bronze
+source.origin: csv
+source.path: /Volumes/dev/source_data/inbound/
+source.directory: CLAIMS
+output.verb: append
+output.schema_name: claims
+output.table: CLAIMS_BRONZE
+
+# Bronze → Silver
+source.origin: delta
+source.schema_name: claims
+source.table: CLAIMS_BRONZE
+output.verb: upsert
+output.schema_name: claims
+output.table: CLAIMS_SILVER
+output.keys: CLAIM_ID
+output.event_time.column: __EXPORT_DATE
+```
+
+No code changes for either step — both are entries in a workflow YAML deployed through the
+bundle. See [03_write_verbs.md](docs/03_write_verbs.md) for the full verb matrix.
 
 ## Documentation
 
@@ -25,8 +77,11 @@ A configuration-driven data platform for quick data onboarding and processing on
 Dependencies and the virtualenv are managed with [Poetry](https://python-poetry.org/) (2.x).
 Python must be **3.11** — it is what Databricks Runtime 15.4 LTS ships.
 
-On Windows, run everything below from WSL (Ubuntu 24.04); Spark does not run natively on
-Windows.
+> **On Windows**, run everything below from WSL (Ubuntu 24.04) — Spark does not run natively
+> on Windows:
+> ```bash
+> wsl -d Ubuntu-24.04 -- bash -lc 'cd /path/to/EscotoDataFramework && poetry run pytest'
+> ```
 
 ```bash
 poetry env use python3.11   # once, to pin the interpreter
@@ -60,13 +115,34 @@ settings are in `.flake8`.
 
 `mypy` and `ruff` are installed and configured but are not part of `make qa` yet.
 
+### Testing
+
+`make test` runs unit tests against a local Spark + Delta session. Platform tests are real
+Databricks jobs under [platform_tests/](platform_tests/) — each one generates its own
+fixtures and asserts the resulting tables:
+
+```bash
+databricks bundle deploy -t dev_01 -p <profile>
+databricks bundle run e2e_test_suite -t dev_01 -p <profile>
+```
+
+See [05_testing.md](docs/05_testing.md) for the full strategy.
+
 ## Deploying to Databricks
 
-The bundle in [databricks.yml](databricks.yml) is configured to work with a python wheel. It builds the python wheel then deploys the the bundle. Authenticate with a CLI profile or with `DATABRICKS_HOST` / `DATABRICKS_TOKEN`:
+The bundle in [databricks.yml](databricks.yml) is configured to work with a Python wheel: it
+builds the wheel, then deploys the bundle. Authenticate with a CLI profile or with
+`DATABRICKS_HOST` / `DATABRICKS_TOKEN`:
 
 ```bash
 databricks bundle deploy
 ```
+
+## Status
+
+Start, Pipeline (CSV + JSON + Delta), Typing, Policies (DQX), and all five write verbs are
+implemented and tested. The SAS origin is not implemented yet. Full phase-by-phase status:
+[06_roadmap.md](docs/06_roadmap.md).
 
 ## License
 
@@ -83,5 +159,8 @@ Apache 2.0 — see [LICENSE](LICENSE).
 [Spark]: https://img.shields.io/badge/Apache_Spark-FFFFFF?style=for-the-badge&logo=apachespark&logoColor=#E35A16
 [Spark-url]: https://spark.apache.org/
 
-[Pandas]: https://img.shields.io/badge/-Pandas-333333?style=flat&logo=pandas
-[Pandas-url]: https://pandas.pydata.org
+[DQX]: https://img.shields.io/badge/Data_Quality-DQX-FF3621?style=for-the-badge
+[DQX-url]: https://databrickslabs.github.io/dqx/
+
+[License]: https://img.shields.io/badge/License-Apache_2.0-blue?style=for-the-badge
+[License-url]: LICENSE
