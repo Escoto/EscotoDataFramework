@@ -2,6 +2,8 @@
 
 # TaskConfig and Requirements are unused on purpose: here the import *is* the
 # assertion, so removing them would drop coverage rather than dead code.
+from importlib import metadata
+
 import data_framework
 from data_framework.context.config import (  # noqa: F401
     Origin,
@@ -16,7 +18,13 @@ from data_framework.typecast.models import CastConfiguration
 
 
 def test_version():
-    assert data_framework.__version__ == "0.1.0"
+    """Pinned to the distribution, not to a literal.
+
+    The release workflow bumps pyproject.toml and rewrites __version__ from it, so a
+    hardcoded string here would fail on the first release instead of catching the drift
+    it exists to catch.
+    """
+    assert data_framework.__version__ == metadata.version("data_framework")
 
 
 def test_enums():

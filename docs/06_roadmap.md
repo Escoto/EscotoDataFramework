@@ -13,8 +13,8 @@ Context → Pipeline/Typing → Writers → Policies → remaining origins.
 | P2 | Pipeline (CSV + Delta) and Typing | ✅ complete |
 | P3 | Output verbs: APPEND, FULL, UPSERT | ✅ complete |
 | P4 | Output verbs: SCD2, COMPLETE_DELTA | ✅ complete |
-| P5 | Policies layer | ⬜ not started |
-| P6 | Pipeline (JSON + SAS) and pre-processors | ⬜ not started |
+| P5 | Policies layer | ✅ complete |
+| P6 | Pipeline (JSON + SAS) and pre-processors | 🟨 in progress |
 
 ---
 
@@ -62,11 +62,21 @@ Context → Pipeline/Typing → Writers → Policies → remaining origins.
 
 **Exit**: policy unit tests green; an `error`-criticality violation fails a run end to end while `warn` does not.
 
+*Outstanding*: the end-to-end half is unproven. The SCD2 platform test carries a ruleset but
+exercises only the passing path, so no platform test yet shows an `error` violation failing a
+run or a `warn` letting one through.
+
 ## P6 — Pipeline (JSON + SAS) and pre-processors
 
 - `json_source` (options, tree-schema logging), `record_envelope` + `flatten_nested` pre-processors, `sas_source` (binaryFile discovery, pandas read, empty-file rules, WINDOWS-1252).
 
 **Exit**: a JSON envelope fixture and a SAS fixture flow end to end; the pre-processor registry is covered by tests.
+
+*Landed*: `json_source`, the `record_envelope` pre-processor and `source.envelope_fields`, proven
+end to end by `complete_delta_json_full_test` (two feeds, two Bronze tables, one Silver).
+
+*Open*: `sas_source` ([#12](https://github.com/Escoto/EscotoDataFramework/issues/12)),
+`flatten_nested`, the SAS fixture, and `json_source` tree-schema logging.
 
 ## Out of scope (explicitly deferred)
 

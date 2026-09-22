@@ -49,12 +49,14 @@ source.file_extension: txt              # optional; defaults to origin (csv read
 
 source.snapshot_time_pattern: datetime  # enum: datetime | timestamp (file-name timestamp shape)
 source.preprocessors: ""                # ordered list of registered names, e.g. "record_envelope"
+source.envelope_fields: "uri, status"   # list; paired with the record_envelope pre-processor
 source.rename_patterns: ""              # list of regex=replacement pairs, e.g. "__[Vv]$="
 source.options.header: true             # csv only (default true)
 source.options.delimiter: ","           # csv only (default ",")
 source.options.quote: '"'               # csv only (default "")
 source.options.escape: "\\"             # csv/json (default "\")
 source.options.multiline: true          # csv/json (default true)
+source.options.schema_hints: "ID STRING"  # optional Auto Loader hints; read by json only today
 
 # delta origin:
 source.schema_name: bronze_main          # schema of the source table
@@ -96,6 +98,14 @@ Notes:
   append/full/upsert/scd2, `watermark` for complete_delta) and the Start layer resolves it
   onto the `Context`. Setting `source.increment_strategy` is rejected as an unknown key.
 - `output.dedup.order_by` is required **only when dedup is enabled**.
+- `record_envelope` unwraps a vendor JSON envelope — `metadata.export_date` plus a `data`
+  array — into one row per item. The keys named in `source.envelope_fields` are lifted into
+  columns of their own and the whole item stays under `DATA` as JSON text, so only those
+  keys have to stay stable when the vendor reshapes a payload.
+- `source.envelope_fields` and `source.preprocessors: record_envelope` are validated as a
+  pair. Either half alone is a silent no-op — fields with no envelope are never read, and
+  an envelope with no fields leaves the batch without a key column — so both are rejected
+  at Start.
 - There is no single overloaded "mode" parameter: Bronze ingestion uses `output.verb: append|full`, Silver promotion uses `output.verb: scd2|complete_delta|upsert`. The verb alone determines how the write behaves.
 - The physical catalog is `{catalog}_{env}`, so one config serves every environment. Table names are UPPERCASE by convention, and that convention is validated.
 

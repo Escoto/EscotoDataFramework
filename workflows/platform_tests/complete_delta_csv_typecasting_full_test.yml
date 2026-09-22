@@ -32,7 +32,7 @@ silver_check: &silver_check ${workspace.file_path}/platform_tests/complete_delta
 
 # Shared with every study-milestones test: the types are a property of the dataset,
 # not of any one workflow.
-cast_config: &cast_config ${workspace.file_path}/resources/platform_tests/types/studymilestones.yml
+cast_config: &cast_config ${workspace.file_path}/workflows/platform_tests/types/studymilestones.yml
 
 catalog: &catalog testing
 bronze_table: &bronze_table COMPLETE_DELTA_STUDYMILESTONES_BRONZE_3

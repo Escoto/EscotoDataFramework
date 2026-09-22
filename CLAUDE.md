@@ -52,7 +52,7 @@ make test    # unit tests, local Spark + Delta, 70% coverage gate
 ```
 
 Platform tests are real Databricks jobs under `platform_tests/`, with their workflow YAML in
-`resources/platform_tests/`. Each generates its own fixtures and asserts the resulting
+`workflows/platform_tests/`. Each generates its own fixtures and asserts the resulting
 tables. Deploy and run them with:
 
 ```bash
