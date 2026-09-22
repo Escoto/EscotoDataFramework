@@ -51,6 +51,7 @@ jobs:
           git add pyproject.toml src/data_framework/__init__.py
           git commit -m "chore: release v${{ steps.bump.outputs.version }}"
           git push origin --delete "v${{ steps.bump.outputs.version }}" || true
+          git tag -d "v${{ steps.bump.outputs.version }}" || true
           git tag "v${{ steps.bump.outputs.version }}"
           git push origin HEAD:main --tags
 
