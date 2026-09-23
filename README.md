@@ -76,17 +76,15 @@ bundle. See [03_write_verbs.md](docs/03_write_verbs.md) for the full verb matrix
 
 ## Development
 
-Dependencies and the virtualenv are managed with [Poetry](https://python-poetry.org/) (2.x).
-Python must be **3.11** — it is what Databricks Runtime 15.4 LTS ships.
+Targets Linux (native or WSL). Dependencies and the virtualenv are managed with
+[Poetry](https://python-poetry.org/) (2.x).
 
-> **On Windows**, run everything below from WSL (Ubuntu 24.04) — Spark does not run natively
-> on Windows:
-> ```bash
-> wsl -d Ubuntu-24.04 -- bash -lc 'cd /path/to/EscotoDataFramework && poetry run pytest'
-> ```
+**Prerequisites**: a JDK (11 or 17 — required by PySpark) and Python **3.11** exactly (matches
+Databricks Runtime 15.4 LTS). If your system Python isn't 3.11, install one (e.g. via
+[pyenv](https://github.com/pyenv/pyenv) or a standalone build) and point Poetry at it.
 
 ```bash
-poetry env use python3.11   # once, to pin the interpreter
+poetry env use python3.11   # once, to pin the interpreter (path to a 3.11 binary if not on PATH)
 make install                # runtime + dev dependencies
 make test                   # unit tests with coverage
 ```
@@ -129,6 +127,15 @@ databricks bundle run e2e_test_suite -t dev_01 -p <profile>
 ```
 
 See [05_testing.md](docs/05_testing.md) for the full strategy.
+
+### On Windows (WSL)
+
+Spark doesn't run natively on Windows, so do all of the above inside WSL (e.g. Ubuntu 24.04),
+not PowerShell/cmd — the Databricks CLI profile lives there too:
+
+```bash
+wsl -d Ubuntu-24.04 -- bash -lc 'cd /path/to/EscotoDataFramework && poetry run pytest'
+```
 
 ## Deploying to Databricks
 

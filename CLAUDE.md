@@ -12,18 +12,21 @@ is deployed via Databricks Declarative Automation Bundles (Previously Databricks
 
 ## Running anything
 
-**All Python runs through WSL.** Spark does not run natively on Windows, so pytest, black,
-flake8, mypy and ruff all go through Ubuntu 24.04:
+Targets native Linux. Run pytest, black, flake8, mypy, ruff and `databricks` directly:
+
+```bash
+poetry run pytest
+```
+
+Python is 3.11 — matching Databricks Runtime 15.4 LTS. Invoke it as `python`, never
+`python3`. Needs a JDK (PySpark) and Poetry with a 3.11 interpreter; see [README.md](README.md#development).
+
+**If this Claude session is running on Windows**, run everything (including `databricks`
+commands, which read the CLI profile from there) through WSL instead:
 
 ```bash
 wsl -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/repos/escoto/EscotoDataFramework && poetry run pytest'
 ```
-
-The Databricks CLI profile also lives inside WSL, not in the Windows `~/.databrickscfg`, so
-`databricks` commands go the same way.
-
-Python is 3.11 — matching Databricks Runtime 15.4 LTS. Invoke it as `python`, never
-`python3`.
 
 ## Conventions
 
