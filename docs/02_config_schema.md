@@ -117,7 +117,7 @@ Verbs are layer-agnostic; the Start layer enforces this matrix (each writer *dec
 |---|---|---|---|---|---|
 | **any origin** | `output.*` target | `output.*` target | + `output.keys` | + `output.keys`, `output.event_time.column` | — |
 | **file origins** (csv/json/sas) | typical Inbound→Bronze | supported | supported | supported | not supported (needs a Delta updates table) |
-| **delta origin** | supported | supported | typical Silver→Gold | typical Bronze→Silver | + `source.snapshot_time_pattern`; optional `source.deletes_table` (with `output.deletes.*`) |
+| **delta origin** | supported | supported | supported | typical Bronze→Silver | + `source.snapshot_time_pattern`; optional `source.deletes_table` (with `output.deletes.*`) |
 | **deletes feed** | — | — | — | — | optional |
 | **`snapshot_scope: full`** | — | — | — | allowed | allowed |
 

@@ -4,9 +4,9 @@ Mismatches between the docs (00–06) and the code at `7be66ec`, plus problems l
 production. Open GitHub issues (GH #2–#8, #12, #13) are left out. ✔ marks findings reproduced with
 a throwaway local Spark test.
 
-| No. | Name | Description | Severity |
-|---|---|---|---|
-| 1 | Silver→Gold and Gold→Export streams fail after first MERGE ✔ | APPEND, FULL and UPSERT (and SCD2 by default) stream a delta origin by checkpoint, and `ignoreDeletes` does not cover updates. Every SCD2, COMPLETE_DELTA, UPSERT or FULL target gets MERGEd or overwritten, so the next read fails with `DELTA_SOURCE_TABLE_IGNORE_CHANGES`. The documented Silver→Gold UPSERT and Gold→Export FULL cannot run past their first load. | Severe |
+| No. | Name | Description | Severity | Resolution |
+|---|---|---|---|---|
+| ~~1~~ | ~~Silver→Gold and Gold→Export streams fail after first MERGE ✔~~ | ~~APPEND, FULL and UPSERT (and SCD2 by default) stream a delta origin by checkpoint, and `ignoreDeletes` does not cover updates. Every SCD2, COMPLETE_DELTA, UPSERT or FULL target gets MERGEd or overwritten, so the next read fails with `DELTA_SOURCE_TABLE_IGNORE_CHANGES`. The documented Silver→Gold UPSERT and Gold→Export FULL cannot run past their first load.~~ | ~~Severe~~ | Taken care of by `gold as materialized view` |
 | 2 | SCD2 commits the close before an insert that can fail ✔ | Closing superseded rows (and full-scope expiry) commits before the insert. If the insert fails every time (a new column under the default `fail_on_new_columns`, or type drift), those keys have no current row. Under `snapshot_scope: full` the whole table has none, and retries fail the same way. | High |
 | 3 | Duplicate keys in one batch open duplicate current rows ✔ | SCD2 and COMPLETE_DELTA assume one row per key per batch, but dedup is optional and off by default. A new key arriving twice is inserted twice as current; an existing key fails the close MERGE instead. | High |
 | 4 | NULL or unparseable event time silently corrupts history ✔ | `as_timestamp` returns NULL for a missing value or a format mismatch, and nothing rejects it. SCD2 then skips both the anti-filter and the close and opens a second current row. UPSERT skips the update and dedup keeps an arbitrary row. | High |

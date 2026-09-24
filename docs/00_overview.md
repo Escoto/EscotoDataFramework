@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`data_framework` is a configuration-driven data engineering framework for Databricks. It ingests files and tables and promotes them through the medallion layers (Inbound → Bronze → Silver → Gold → Export) with typed configuration and explicit contracts between stages.
+`data_framework` is a configuration-driven data engineering framework for Databricks. It ingests files and tables and promotes them through the medallion layers (Inbound → Bronze → Silver) with typed configuration and explicit contracts between stages. Gold is SQL on top of Silver — see [Gold](#gold).
 
 Onboarding a dataset means writing a workflow YAML. It does not mean writing Python.
 
@@ -33,7 +33,7 @@ flowchart LR
 
 1. **Configuration over code.** A new dataset is onboarded by writing a workflow YAML, never by adding Python. Workflow YAMLs stay flat `key: value` task parameters, so Databricks Asset Bundles and YAML anchors keep working; the Start layer turns them into one validated, typed `Context`.
 2. **Layers communicate only via Context + DataFrame.** Each layer is independently testable, replaceable, and ignorant of the others' internals. No layer reads raw parameters — only the typed Context.
-3. **Verbs are layer-agnostic.** Any source origin can pair with any write verb whose declared requirements are met. Bronze→Silver APPEND or Gold→Export FULL are configurations, not new code paths. The Start layer validates each origin × verb combination and fails fast with a single aggregated error report.
+3. **Verbs are layer-agnostic.** Any source origin can pair with any write verb whose declared requirements are met. Inbound→Bronze FULL or Bronze→Silver APPEND are configurations, not new code paths. The Start layer validates each origin × verb combination and fails fast with a single aggregated error report.
 4. **Fail fast, fail loudly.** Invalid config, unknown origins, and failed `error`-criticality checks stop the task with a clear error. Nothing logs an error and then reports success.
 5. **Contracts are explicit.** The Silver metadata columns and the audit log table have fixed, documented shapes that downstream consumers can rely on (see Glossary below).
 6. **Extension points, not special cases.** Source-specific behavior — one vendor's JSON envelope, say — lives in named, config-selected pre-processors, never hardcoded in a generic path. Data quality rules are declared in a DQX ruleset file, never in Python.
@@ -51,6 +51,17 @@ flowchart LR
 
 Cross-cutting: `data_framework.observability` (audit/KPI logging) and `data_framework.entrypoints` (wheel entry points).
 
+## Gold
+
+Gold is SQL, not a verb. The framework's job ends at Silver.
+
+- **One materialized view per Gold table**, in its own `.sql` file, deployed with the bundle.
+- **One example ships with the framework:** the current state of a Silver table (`__CURRENT_FLAG = 'Y'`, metadata columns dropped).
+- **Everything else is the view's own query** — joins, aggregates, business rules, whatever parameters it needs.
+- **Silver never blocks Gold.** A view reads Silver as state, so MERGEs and rewrites are picked up on the next refresh.
+- **Disposable.** Drop it and rebuild it from Silver at any time; history lives in Silver.
+- **Checked and traced upstream.** The DQX gate and the audit log cover data on its way into Silver, not Gold.
+
 ## Glossary
 
 | Term | Meaning |
@@ -65,7 +76,7 @@ Cross-cutting: `data_framework.observability` (audit/KPI logging) and `data_fram
 | **Watermark** | `max(__EXPORT_DATE)` already present in the target; an incremental read processes only source rows newer than it. |
 | **Silver metadata contract** | The framework-managed columns: `__FILEPATH`, `__BRONZE_LAST_MODIFIED_DT`, `__SILVER_LAST_MODIFIED_DT`, `__START_DATE`, `__END_DATE`, `__CURRENT_FLAG` (`Y`/`N`), `__DELETED_FLAG` (`Y`/`N`), `__EXPORT_DATE`. |
 | **Audit log contract** | Every run logs to `` `monitoring_{env}`.`audit`.`logs` `` with a fixed schema (uuid, job_id, task_id, timestamp, type, catalog, schema, table, name, source, total, description). KPI events use `source="KPI"`. |
-| **Medallion layers** | Inbound (raw files on a Volume) → Bronze (raw Delta) → Silver (typed, deduplicated, history-tracked) → Gold (business aggregates) → Export (files/outbound). |
+| **Medallion layers** | Inbound (raw files on a Volume) → Bronze (raw Delta) → Silver (typed, deduplicated, history-tracked) → Gold (materialized views over Silver, see [Gold](#gold)) → Export (files/outbound). |
 
 ## Document map
 
