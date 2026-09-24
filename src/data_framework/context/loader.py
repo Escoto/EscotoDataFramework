@@ -240,8 +240,15 @@ def validate_requirements(config: TaskConfig) -> list[str]:
     if reqs.keys and not config.output.keys:
         errors.append(f"output.verb={verb} requires output.keys")
 
+    dedup = config.output.dedup
     if reqs.event_time and not config.output.event_time:
         errors.append(f"output.verb={verb} requires output.event_time.column")
+    elif reqs.keys and dedup.enabled and not (dedup.order_by or config.output.event_time):
+        # Without an order, "latest row per key" would keep an arbitrary one.
+        errors.append(
+            f"output.verb={verb} deduplicates by default and needs an order: set "
+            "output.event_time.column or output.dedup.order_by, or output.dedup.enabled=false"
+        )
 
     if reqs.snapshot_time_pattern and not config.source.snapshot_time_pattern:
         errors.append(f"output.verb={verb} requires source.snapshot_time_pattern")

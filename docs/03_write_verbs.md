@@ -37,7 +37,7 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 
 > *Latest state per key, no history.* Typical: Bronze→Silver when history isn't needed.
 
-- **Requires**: `output.keys`. Optional: `output.dedup.*` (recommended when the source may carry several versions per key in one batch), `output.event_time.*` (when present, "newer wins" uses it; otherwise last write wins).
+- **Requires**: `output.keys`. Optional: `output.event_time.*` (when present, "newer wins" uses it; otherwise last write wins), `output.dedup.*` (on by default — without `output.event_time`, set `output.dedup.order_by` or `output.dedup.enabled: false`).
 - **Semantics**: Delta `MERGE` on the keys —
   - matched → update all columns (when `event_time` configured: only if source is newer);
   - not matched → insert.
@@ -56,7 +56,7 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 **Algorithm** (per batch):
 
 1. Optional rename patterns; event-time/dedup-column normalization to timestamp. These normalized columns are held internally and never persisted, so the target schema stays the one the source defines.
-2. Optional dedup: keep the latest row per `dedup.columns` ordered by `dedup.order_by` desc.
+2. Dedup (on by default): keep the latest row per key (`output.keys`), ordered by event time desc. `dedup.columns` / `dedup.order_by` override either.
 3. Add `__SILVER_LAST_MODIFIED_DT`; drop `__BRONZE_LAST_MODIFIED_DT`.
 4. Target absent → create with metadata init (`__START_DATE` = event_time or now, `__END_DATE` = NULL, flags Y/N).
 5. Target present:

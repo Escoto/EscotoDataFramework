@@ -83,9 +83,9 @@ output.keys: "ID"                 # list; required by upsert/scd2/complete_delta
 output.event_time.column: MODIFIEDDATE      # required by scd2/complete_delta
 output.event_time.format: "M/d/yyyy h:mm:ss a"  # optional; only when the column is a string (…_fmt)
 output.snapshot_scope: delta      # enum: delta | full (default delta)
-output.dedup.enabled: true        # bool, default false
-output.dedup.columns: "ID"        # list; empty → all non-metadata columns
-output.dedup.order_by: MODIFIEDDATE     # required when dedup enabled
+output.dedup.enabled: true        # bool, default true
+output.dedup.columns: "ID"        # list; empty → output.keys
+output.dedup.order_by: MODIFIEDDATE     # empty → output.event_time.column
 output.dedup.order_by_format: "M/d/yyyy h:mm:ss a"  # optional
 output.deletes.keys: "ID"               # deletes feed join keys
 output.deletes.event_time.column: DATE_DELETED
@@ -97,7 +97,9 @@ Notes:
 - The increment strategy is **not a parameter**: each verb declares it (`checkpoint` for
   append/full/upsert/scd2, `watermark` for complete_delta) and the Start layer resolves it
   onto the `Context`. Setting `source.increment_strategy` is rejected as an unknown key.
-- `output.dedup.order_by` is required **only when dedup is enabled**.
+- Dedup is **on by default** for keyed verbs (upsert/scd2/complete_delta): the latest row per
+  `output.keys`, ordered by `output.event_time`. An upsert without `output.event_time` must
+  set `output.dedup.order_by` or `output.dedup.enabled: false`.
 - `record_envelope` unwraps a vendor JSON envelope — `metadata.export_date` plus a `data`
   array — into one row per item. The keys named in `source.envelope_fields` are lifted into
   columns of their own and the whole item stays under `DATA` as JSON text, so only those

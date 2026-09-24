@@ -150,7 +150,7 @@ def test_full_never_wipes_the_target_with_an_empty_batch(spark, database):
 
 
 def _upsert_ctx(spark, database, **overrides):
-    defaults = dict(verb=Verb.UPSERT, keys=["ID"])
+    defaults = dict(verb=Verb.UPSERT, keys=["ID"], event_time=EventTimeConfig(column="UPDATED"))
     defaults.update(overrides)
     return _ctx(spark, database, **defaults)
 
@@ -195,7 +195,7 @@ def test_upsert_applies_a_newer_batch(spark, database):
 
 
 def test_upsert_without_an_event_time_lets_the_batch_win(spark, database):
-    ctx = _upsert_ctx(spark, database)
+    ctx = _upsert_ctx(spark, database, event_time=None, dedup=DedupConfig(enabled=False))
     writer = UpsertWriter()
     writer.write(_people(spark, [("1", "first", "2024-06-01")]), ctx)
 
@@ -213,6 +213,16 @@ def test_upsert_collapses_duplicate_keys_within_one_batch(spark, database):
 
     UpsertWriter().write(
         _people(spark, [("1", "old", "2024-01-01"), ("1", "new", "2024-06-01")]), ctx
+    )
+
+    assert _rows(spark, database) == {("1", "new")}
+
+
+def test_upsert_dedups_by_keys_and_event_time_by_default(spark, database):
+    ctx = _upsert_ctx(spark, database)
+
+    UpsertWriter().write(
+        _people(spark, [("1", "new", "2024-06-01"), ("1", "old", "2024-01-01")]), ctx
     )
 
     assert _rows(spark, database) == {("1", "new")}

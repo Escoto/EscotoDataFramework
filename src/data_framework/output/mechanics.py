@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
     from data_framework.context.context import Context
 
-METADATA_PREFIX = "__"
 BRONZE_TIMESTAMP = "__BRONZE_LAST_MODIFIED_DT"
 SILVER_TIMESTAMP = "__SILVER_LAST_MODIFIED_DT"
 FILE_PATH = "__FILEPATH"
@@ -134,19 +133,24 @@ def require_creatable(df: DataFrame, ctx: Context) -> None:
 
 
 def deduplicate(df: DataFrame, ctx: Context) -> DataFrame:
-    """Keep the latest row per key within the batch, when configured.
+    """Keep the latest row per key within the batch, unless disabled.
 
-    Ordering uses an expression rather than a derived column, so nothing extra is
-    written to the target.
+    On by default because the keyed verbs assume one row per key per batch; a second
+    one opens a duplicate current row. Ordering uses an expression rather than a
+    derived column, so nothing extra is written to the target.
     """
-    dedup = ctx.config.output.dedup
-    if not dedup.enabled or not dedup.order_by:
+    output = ctx.config.output
+    dedup = output.dedup
+    if not dedup.enabled:
         return df
 
-    columns = dedup.columns or [c for c in df.columns if not c.startswith(METADATA_PREFIX)]
-    window = Window.partitionBy(*[F.col(f"`{c}`") for c in columns]).orderBy(
-        as_timestamp(dedup.order_by, dedup.order_by_format).desc()
-    )
+    columns = dedup.columns or output.keys
+    if dedup.order_by:
+        order = as_timestamp(dedup.order_by, dedup.order_by_format)
+    else:
+        assert output.event_time  # guaranteed at Start when dedup is enabled
+        order = as_timestamp(output.event_time.column, output.event_time.format)
+    window = Window.partitionBy(*[F.col(f"`{c}`") for c in columns]).orderBy(order.desc())
     return (
         df.withColumn(_DEDUP_RANK, F.row_number().over(window))
         .filter(F.col(_DEDUP_RANK) == 1)
