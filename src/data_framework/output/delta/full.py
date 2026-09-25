@@ -13,6 +13,7 @@ from data_framework.output.mechanics import (
     latest_export,
     log_rows_written,
     merge_schema,
+    promote,
     require_creatable,
 )
 
@@ -64,7 +65,8 @@ class FullWriter:
             df = df.filter(F.col(EXPORT_DATE) == F.lit(latest))
 
         (
-            df.write.format("delta")
+            promote(df)
+            .write.format("delta")
             .mode("overwrite")
             .option("mergeSchema", merge_schema(ctx))
             .saveAsTable(ctx.target_table)
