@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from data_framework.context.config import IncrementStrategy, Origin, TaskConfig, Verb
-from data_framework.context.loader import ConfigValidationError, load_config
+from data_framework.context.loader import (
+    ConfigValidationError,
+    load_config,
+    validate_requirements,
+)
 
 MINIMAL_PARAMS = {
     "catalog": "cro",
@@ -176,7 +180,7 @@ def test_nested_model_defaults():
     assert config.source.options.delimiter == ","
     assert config.source.options.multiline is True
     assert config.source.preprocessors == []
-    assert config.output.dedup.enabled is False
+    assert config.output.dedup.enabled is True
     assert config.output.dedup.columns == []
     assert config.typing.validate_casts is True
     assert config.policies.checks_file is None
@@ -322,15 +326,26 @@ def test_deletes_table_rejected_on_file_origin():
         load_config(params)
 
 
-def test_dedup_enabled_requires_order_by():
-    params = {**MINIMAL_PARAMS, "output.dedup.enabled": "true"}
-    with pytest.raises(ConfigValidationError, match="output.dedup.order_by"):
-        load_config(params)
+_UPSERT_PARAMS = {**MINIMAL_PARAMS, "output.verb": "upsert", "output.keys": "ID"}
 
 
-def test_dedup_order_by_not_required_when_disabled():
-    config = load_config({**MINIMAL_PARAMS, "output.dedup.enabled": "false"})
-    assert config.output.dedup.order_by is None
+def test_default_dedup_needs_an_order_on_a_keyed_verb():
+    errors = validate_requirements(load_config(_UPSERT_PARAMS))
+    assert any("output.dedup.order_by" in error for error in errors)
+
+
+def test_default_dedup_orders_by_event_time():
+    params = {**_UPSERT_PARAMS, "output.event_time.column": "UPDATED_AT"}
+    assert validate_requirements(load_config(params)) == []
+
+
+def test_dedup_order_not_required_when_disabled():
+    params = {**_UPSERT_PARAMS, "output.dedup.enabled": "false"}
+    assert validate_requirements(load_config(params)) == []
+
+
+def test_default_dedup_ignored_by_unkeyed_verbs():
+    assert validate_requirements(load_config(MINIMAL_PARAMS)) == []
 
 
 @pytest.mark.parametrize("table", ["agents", "Agents", "AGENTS_v2"])

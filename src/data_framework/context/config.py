@@ -162,16 +162,12 @@ class SourceConfig(BaseModel):
 
 
 class DedupConfig(BaseModel):
-    enabled: bool = False
+    """Empty columns and order_by fall back to output.keys and output.event_time."""
+
+    enabled: bool = True
     columns: list[str] = []
     order_by: Optional[str] = None
     order_by_format: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _require_order_by_when_enabled(self) -> "DedupConfig":
-        if self.enabled and not self.order_by:
-            raise ValueError("output.dedup.enabled=true requires output.dedup.order_by")
-        return self
 
 
 class DeletesConfig(BaseModel):

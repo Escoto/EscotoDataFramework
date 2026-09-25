@@ -27,7 +27,9 @@ The project is **alpha** — see [Status](#status) for what's implemented today.
 - **Five typed layers** — Start → Pipeline → Typing → Policies → Output, each reachable only
   through a typed `Context` and a DataFrame, so every layer is independently testable.
 - **Five write verbs** — `APPEND`, `FULL`, `UPSERT`, `SCD2`, `COMPLETE_DELTA` — layer-agnostic,
-  so the same verb serves Bronze→Silver or Gold→Export.
+  so the same verb serves Inbound→Bronze or Bronze→Silver.
+- **Gold is SQL** — each Gold table is a materialized view over Silver, in its own `.sql` file.
+  Silver's MERGEs never block it. See [Gold](docs/00_overview.md#gold).
 - **A data quality gate, not a bolt-on** — every batch is checked against a
   [Databricks DQX](https://databrickslabs.github.io/dqx/) ruleset before it's written;
   `error` refuses the batch, `warn` logs and lets it through.
@@ -170,7 +172,8 @@ Nothing leaves the workspace, and there's no flag to turn it off. Full contract:
 ## Status
 
 Start, Pipeline (CSV + JSON + Delta), Typing, Policies (DQX), and all five write verbs are
-implemented and tested. The SAS origin is not implemented yet. Full phase-by-phase status:
+implemented and tested. The SAS origin and the Gold example view are not implemented yet.
+Full phase-by-phase status:
 [06_roadmap.md](docs/06_roadmap.md).
 
 ## License

@@ -31,3 +31,11 @@ resources:
         - task_key: complete_delta_json_full_test
           run_job_task:
             job_id: ${resources.jobs.complete_delta_json_full_test.id}
+
+        - task_key: full_csv_long_backlog_test
+          run_job_task:
+            job_id: ${resources.jobs.full_csv_long_backlog_test.id}
+
+        - task_key: scd2_long_backlog_test
+          run_job_task:
+            job_id: ${resources.jobs.scd2_long_backlog_test.id}

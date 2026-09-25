@@ -19,7 +19,7 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 
 ## 1. APPEND
 
-> *Get the latest from a layer and load it into the next.* Typical: Inbound→Bronze. Also valid Bronze→Silver or Gold→Export.
+> *Get the latest from a layer and load it into the next.* Typical: Inbound→Bronze. Also valid Bronze→Silver.
 
 - **Requires**: target only.
 - **Semantics**: write incoming records to the target with Delta `append` (with `mergeSchema` when schema evolution is enabled). No keys, no history columns beyond what the Pipeline added.
@@ -28,16 +28,16 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 
 ## 2. FULL
 
-> *Snapshot and overwrite.* Typical: Gold→Export, reference tables, full-refresh feeds.
+> *Snapshot and overwrite.* Typical: reference tables, full-refresh feeds.
 
 - **Requires**: target only.
 - **Semantics**: Delta `overwrite` of the target with the current dataset (with `mergeSchema`). Empty input → **skip** with an audit log entry. A source that produced nothing is a run with no news, not an instruction to empty the table.
 
 ## 3. UPSERT — *new in the rewrite* (SCD Type 1)
 
-> *Latest state per key, no history.* The GOLD-layer builder.
+> *Latest state per key, no history.* Typical: Bronze→Silver when history isn't needed.
 
-- **Requires**: `output.keys`. Optional: `output.dedup.*` (recommended when the source may carry several versions per key in one batch), `output.event_time.*` (when present, "newer wins" uses it; otherwise last write wins).
+- **Requires**: `output.keys`. Optional: `output.event_time.*` (when present, "newer wins" uses it; otherwise last write wins), `output.dedup.*` (on by default — without `output.event_time`, set `output.dedup.order_by` or `output.dedup.enabled: false`).
 - **Semantics**: Delta `MERGE` on the keys —
   - matched → update all columns (when `event_time` configured: only if source is newer);
   - not matched → insert.
@@ -56,7 +56,7 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 **Algorithm** (per batch):
 
 1. Optional rename patterns; event-time/dedup-column normalization to timestamp. These normalized columns are held internally and never persisted, so the target schema stays the one the source defines.
-2. Optional dedup: keep the latest row per `dedup.columns` ordered by `dedup.order_by` desc.
+2. Dedup (on by default): keep the latest row per key (`output.keys`), ordered by event time desc. `dedup.columns` / `dedup.order_by` override either.
 3. Add `__SILVER_LAST_MODIFIED_DT`; drop `__BRONZE_LAST_MODIFIED_DT`.
 4. Target absent → create with metadata init (`__START_DATE` = event_time or now, `__END_DATE` = NULL, flags Y/N).
 5. Target present:
@@ -136,5 +136,6 @@ No physical deletes, ever — history is preserved.
 | Bronze→Silver, source sends change feeds, all history must be visible | `complete_delta` |
 | Bronze→Silver, current-state tracking with history, latest per batch is enough | `scd2` |
 | Source sends complete snapshots and absent = deleted | `scd2`/`complete_delta` + `snapshot_scope: full` |
-| Silver→Gold business tables (latest state only) | `upsert` |
-| Gold→Export, reference full refresh | `full` |
+| Bronze→Silver, latest state only, no history | `upsert` |
+| Reference data, full refresh | `full` |
+| Gold | not a verb — a materialized view over Silver ([Gold](00_overview.md#gold)) |
