@@ -35,9 +35,7 @@ expect_rows(df, SILVER_EXPECTED)
 
 # Every KEYSEQ from the third export appears exactly once — no leftovers from the
 # two superseded exports riding along in the same overwrite.
-duplicated = (
-    df.groupBy("KEYSEQ").count().filter(F.col("count") > 1).select("KEYSEQ").collect()
-)
+duplicated = df.groupBy("KEYSEQ").count().filter(F.col("count") > 1).select("KEYSEQ").collect()
 assert not duplicated, f"KEYSEQ(s) appear more than once: {[r['KEYSEQ'] for r in duplicated]}"
 
 # The second half's update from export 3 (Completed, not export 2's Pending) must win.
