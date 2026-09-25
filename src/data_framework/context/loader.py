@@ -208,15 +208,6 @@ def _increment_errors(config: TaskConfig, reqs: Requirements, verb: str) -> list
             f"not {strategy.value}"
         )
 
-    if (
-        strategy == IncrementStrategy.LATEST_SNAPSHOT
-        and config.output.snapshot_scope != SnapshotScope.FULL
-    ):
-        errors.append(
-            "source.increment_strategy=latest_snapshot requires output.snapshot_scope=full: "
-            "it keeps only the newest snapshot, which would discard data from a delta feed"
-        )
-
     return errors
 
 

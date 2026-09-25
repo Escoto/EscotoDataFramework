@@ -186,42 +186,39 @@ def test_scd2_keeps_only_the_latest_row_per_key_within_a_batch(spark, database):
     assert _history(spark, database) == {("A", "v2", _at(2), None, "Y", "N")}
 
 
-def test_scd2_full_scope_expires_records_the_snapshot_no_longer_carries(spark, database):
-    """A full-snapshot source deletes by omission: C is absent, so C is gone."""
-    ctx = _ctx(spark, database, snapshot_scope=SnapshotScope.FULL)
-    writer = Scd2Writer()
-
-    writer.write(
-        _subjects(
-            spark,
-            [
-                ("A", "v1", "2026-01-01 00:00:00"),
-                ("C", "v1", "2026-01-01 00:00:00"),
-            ],
-        ),
-        ctx,
+def test_scd2_leaves_a_key_the_newest_export_omits_untouched(spark, database):
+    """SCD2 takes changes: B's absence from export 2 is not a deletion."""
+    ctx = _ctx(spark, database)
+    backlog = _snapshot_subjects(
+        spark,
+        [
+            ("A", "v1", "2026-01-01 00:00:00", 1),
+            ("B", "v1", "2026-01-01 00:00:00", 1),
+            ("A", "v2", "2026-01-02 00:00:00", 2),
+        ],
     )
-    writer.write(_subjects(spark, [("A", "v2", "2026-01-02 00:00:00")]), ctx)
 
-    current = {(row[0], row[1]) for row in _history(spark, database) if row[4] == "Y"}
-    assert current == {("A", "v2")}
+    Scd2Writer().write(backlog, ctx)
 
-    expired_c = [row for row in _history(spark, database) if row[0] == "C"]
-    assert len(expired_c) == 1
-    assert expired_c[0][4] == "N"
-    # Omitted, not retired by a deletes feed: the flag stays clear.
-    assert expired_c[0][5] == "N"
+    assert _history(spark, database) == {
+        ("A", "v2", _at(2), None, "Y", "N"),
+        ("B", "v1", _at(1), None, "Y", "N"),
+    }
 
 
-def test_scd2_full_scope_leaves_the_table_alone_when_the_batch_is_empty(spark, database):
-    """No news is not an instruction to retire the whole table."""
-    ctx = _ctx(spark, database, snapshot_scope=SnapshotScope.FULL)
-    writer = Scd2Writer()
+def test_scd2_prefers_the_newer_export_when_event_times_tie(spark, database):
+    ctx = _ctx(spark, database)
+    backlog = _snapshot_subjects(
+        spark,
+        [
+            ("A", "v2", "2026-01-01 00:00:00", 2),
+            ("A", "v1", "2026-01-01 00:00:00", 1),
+        ],
+    )
 
-    writer.write(_subjects(spark, [("A", "v1", "2026-01-01 00:00:00")]), ctx)
-    writer.write(_subjects(spark, []), ctx)
+    Scd2Writer().write(backlog, ctx)
 
-    assert _history(spark, database) == {("A", "v1", _at(1), None, "Y", "N")}
+    assert _history(spark, database) == {("A", "v2", _at(1), None, "Y", "N")}
 
 
 # --- COMPLETE_DELTA --------------------------------------------------------
@@ -309,6 +306,41 @@ def test_complete_delta_applies_the_deletes_feed_of_each_snapshot(spark, databas
         ("A", "v2", _at(2), None, "Y", "N"),
         ("B", "v1", _at(1), _at(2), "N", "Y"),
     }
+
+
+def test_complete_delta_full_scope_expires_records_a_snapshot_no_longer_carries(spark, database):
+    """A full-snapshot source deletes by omission: C is absent from snapshot 2."""
+    ctx = _complete_delta_ctx(spark, database, output={"snapshot_scope": SnapshotScope.FULL})
+    updates = _snapshot_subjects(
+        spark,
+        [
+            ("A", "v1", "2026-01-01 00:00:00", 1),
+            ("C", "v1", "2026-01-01 00:00:00", 1),
+            ("A", "v2", "2026-01-02 00:00:00", 2),
+        ],
+    )
+
+    CompleteDeltaWriter().write(updates, ctx)
+
+    current = {(row[0], row[1]) for row in _history(spark, database) if row[4] == "Y"}
+    assert current == {("A", "v2")}
+
+    expired_c = [row for row in _history(spark, database) if row[0] == "C"]
+    assert len(expired_c) == 1
+    assert expired_c[0][4] == "N"
+    # Omitted, not retired by a deletes feed: the flag stays clear.
+    assert expired_c[0][5] == "N"
+
+
+def test_complete_delta_full_scope_leaves_the_table_alone_when_nothing_is_pending(spark, database):
+    """No news is not an instruction to retire the whole table."""
+    ctx = _complete_delta_ctx(spark, database, output={"snapshot_scope": SnapshotScope.FULL})
+    writer = CompleteDeltaWriter()
+
+    writer.write(_snapshot_subjects(spark, [("A", "v1", "2026-01-01 00:00:00", 1)]), ctx)
+    writer.write(_snapshot_subjects(spark, []), ctx)
+
+    assert _history(spark, database) == {("A", "v1", _at(1), None, "Y", "N")}
 
 
 def test_complete_delta_creates_an_empty_target_when_nothing_is_pending(spark, database):

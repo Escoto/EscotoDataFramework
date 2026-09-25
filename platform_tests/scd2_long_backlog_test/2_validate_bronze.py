@@ -1,4 +1,4 @@
-"""Step 2 — bronze holds all three exports verbatim; it is APPEND, not the bug."""
+"""Step 2 — bronze holds all three exports verbatim; APPEND keeps every row."""
 
 import sys
 

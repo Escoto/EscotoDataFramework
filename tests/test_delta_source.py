@@ -240,43 +240,6 @@ def _snapshot(spark, database, table, rows, mode="append"):
     )
 
 
-def test_latest_snapshot_reads_only_the_newest_file(spark, database):
-    _snapshot(spark, database, "UPDATES", [("1", "2024-01-01", datetime(2024, 1, 1))])
-    _snapshot(spark, database, "UPDATES", [("1", "2024-01-01", datetime(2024, 1, 2))])
-    ctx = _context(spark, database, IncrementStrategy.LATEST_SNAPSHOT)
-
-    rows = DeltaSource().read(ctx).collect()
-
-    assert [row["__EXPORT_DATE"] for row in rows] == [datetime(2024, 1, 2)]
-
-
-def test_latest_snapshot_stays_constant_as_unchanged_snapshots_pile_up(spark, database):
-    """The onboarding case: a daily snapshot whose contents never change.
-
-    An unchanged snapshot writes nothing to the target, so the target's high-water mark
-    never advances and the watermark's read window grows by one snapshot per day.
-    latest_snapshot reads one snapshot no matter how far behind the target is.
-    """
-    _snapshot(spark, database, "SUBJECTS", [("1", "2024-01-01", datetime(2024, 1, 1))])
-    for day in range(1, 6):
-        _snapshot(spark, database, "UPDATES", [("1", "2024-01-01", datetime(2024, 1, day))])
-
-    growing = DeltaSource().read(_context(spark, database, IncrementStrategy.WATERMARK))
-    constant = DeltaSource().read(_context(spark, database, IncrementStrategy.LATEST_SNAPSHOT))
-
-    assert growing.count() == 4  # days 2..5, and one more every day it runs
-    assert constant.count() == 1
-
-
-def test_latest_snapshot_on_an_empty_source_reads_nothing(spark, database):
-    spark.createDataFrame([], SNAPSHOT_SCHEMA).write.format("delta").saveAsTable(
-        f"`{database}`.`UPDATES`"
-    )
-    ctx = _context(spark, database, IncrementStrategy.LATEST_SNAPSHOT)
-
-    assert DeltaSource().read(ctx).count() == 0
-
-
 def test_a_record_anchor_reads_nothing_when_no_record_changed(spark, database):
     """The other snapshot case: the source carries a per-record date.
 

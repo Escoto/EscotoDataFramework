@@ -32,7 +32,7 @@ data_framework/
 │   │   │   ├── append.py            #   APPEND
 │   │   │   ├── full.py              #   FULL (overwrite)
 │   │   │   ├── upsert.py            #   UPSERT (SCD1)
-│   │   │   ├── scd2.py              #   SCD2 merge engine (close-and-insert, snapshot_scope)
+│   │   │   ├── scd2.py              #   SCD2 merge engine (close-and-insert)
 │   │   │   └── complete_delta.py    #   snapshot replay orchestration on top of scd2.py
 │   │   └── files.py                 #   FileWriter — interface only (implementation deferred)
 │   ├── observability/

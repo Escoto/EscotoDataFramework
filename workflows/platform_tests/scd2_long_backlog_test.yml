@@ -1,15 +1,13 @@
-# End-to-end platform test: CSV → Bronze (APPEND) → Silver (SCD2, snapshot_scope: full).
+# End-to-end platform test: CSV → Bronze (APPEND) → Silver (SCD2).
 #
-# Demonstrates CODE_REVIEW.md #6: SCD2 treats each micro-batch as one snapshot. All
-# three exports are landed in inbound before the pipeline ever runs, so Auto Loader's
-# availableNow trigger (no maxFilesPerTrigger is set anywhere) hands SCD2's
-# first-ever silver run all three exports as one batch. KEYSEQ 15 and 20 are sent in
-# exports 1 and 2 but dropped by export 3 — a real full-scope deletion. dedup only
-# collapses a key that repeats *within* the batch, so 15 and 20 have nothing to dedup
-# against and survive as current, even though the newest export no longer sends them.
+# GH #22: SCD2 takes changes, never full snapshots. All three exports are landed in
+# inbound before the pipeline ever runs, so Auto Loader's availableNow trigger hands
+# SCD2's first silver run all three as one batch. Every key must end with exactly one
+# current row at its newest version. KEYSEQ 15 and 20 are absent from export 3, and
+# absence is not deletion under SCD2: they stay current at their export-2 version.
 #
-# One round is the point here, unlike scd2_csv_test's two: the defect only appears
-# when more than one snapshot lands in a single micro-batch.
+# One round is the point here, unlike scd2_csv_test's two: the case only appears
+# when more than one export lands in a single micro-batch.
 
 base: &base ${workspace.file_path}/platform_tests/scd2_long_backlog_test
 cleanup_script: &cleanup_script ${workspace.file_path}/platform_tests/scd2_long_backlog_test/0_cleanup.py
@@ -48,7 +46,6 @@ silver_params: &silver_params
   output.keys: KEYSEQ
   output.event_time.column: REFRESHDATE
   output.event_time.format: MM/dd/yyyy HH:mm:ss
-  output.snapshot_scope: full
 
 identity: &identity
   __workflow_id: "{{job.id}}"

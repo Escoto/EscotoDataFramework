@@ -1,12 +1,9 @@
 """Step 3 — silver must hold exactly the last full export, nothing else.
 
-This is expected to FAIL until CODE_REVIEW.md #11 ("FULL overwrites with the
-increment, not the dataset") is fixed. FULL's contract (docs/03_write_verbs.md) is
-"overwrite the target with the current dataset" — the third export, on its own, is
-the current dataset. Today FULL instead overwrites with whatever the checkpoint
-handed it, which on this test's first-ever silver run is the union of all three
-backlogged exports: 70 rows, with duplicate KEYSEQs, instead of the 30 rows the
-third export actually describes.
+FULL's contract (docs/03_write_verbs.md) is "overwrite the target with the current
+dataset", and the newest export alone is the current dataset. This run's batch holds
+all three backlogged exports (70 rows, duplicate KEYSEQs); only the third's 30 rows
+may land.
 """
 
 import sys
