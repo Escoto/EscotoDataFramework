@@ -82,7 +82,7 @@ output.table: SUBJECTS            # str, required, UPPERCASE
 output.keys: "ID"                 # list; required by upsert/scd2/complete_delta
 output.event_time.column: MODIFIEDDATE      # required by scd2/complete_delta
 output.event_time.format: "M/d/yyyy h:mm:ss a"  # optional; only when the column is a string (…_fmt)
-output.snapshot_scope: delta      # enum: delta | full (default delta)
+output.snapshot_scope: delta      # enum: delta | full (default delta); complete_delta only
 output.dedup.enabled: true        # bool, default true
 output.dedup.columns: "ID"        # list; empty → output.keys
 output.dedup.order_by: MODIFIEDDATE     # empty → output.event_time.column
@@ -94,12 +94,14 @@ output.deletes.event_time.format: yyyyMMddHHmmss
 
 Notes:
 
-- The increment strategy is **not a parameter**: each verb declares it (`checkpoint` for
-  append/full/upsert/scd2, `watermark` for complete_delta) and the Start layer resolves it
-  onto the `Context`. Setting `source.increment_strategy` is rejected as an unknown key.
+- Each verb declares its increment strategy (`checkpoint` for append/full/upsert/scd2,
+  `watermark` for complete_delta) and the Start layer resolves it onto the `Context`.
+  `source.increment_strategy` only picks where a verb allows more than one: scd2 may opt
+  into `watermark`. Any other choice is rejected at Start.
 - Dedup is **on by default** for keyed verbs (upsert/scd2/complete_delta): the latest row per
-  `output.keys`, ordered by `output.event_time`. An upsert without `output.event_time` must
-  set `output.dedup.order_by` or `output.dedup.enabled: false`.
+  `output.keys`, ordered by `output.event_time`, ties broken by the newer `__EXPORT_DATE`.
+  An upsert without `output.event_time` must set `output.dedup.order_by` or
+  `output.dedup.enabled: false`.
 - `record_envelope` unwraps a vendor JSON envelope — `metadata.export_date` plus a `data`
   array — into one row per item. The keys named in `source.envelope_fields` are lifted into
   columns of their own and the whole item stays under `DATA` as JSON text, so only those
@@ -121,7 +123,7 @@ Verbs are layer-agnostic; the Start layer enforces this matrix (each writer *dec
 | **file origins** (csv/json/sas) | typical Inbound→Bronze | supported | supported | supported | not supported (needs a Delta updates table) |
 | **delta origin** | supported | supported | supported | typical Bronze→Silver | + `source.snapshot_time_pattern`; optional `source.deletes_table` (with `output.deletes.*`) |
 | **deletes feed** | — | — | — | — | optional |
-| **`snapshot_scope: full`** | — | — | — | allowed | allowed |
+| **`snapshot_scope: full`** | — | — | — | — | allowed |
 
 Validation failures name the missing/conflicting keys, e.g.:
 `output.verb=scd2 requires: output.keys, output.event_time.column — missing: output.event_time.column`.

@@ -45,7 +45,6 @@ class SnapshotTimePattern(StrEnum):
 class IncrementStrategy(StrEnum):
     CHECKPOINT = "checkpoint"
     WATERMARK = "watermark"
-    LATEST_SNAPSHOT = "latest_snapshot"
 
 
 class Severity(StrEnum):

@@ -1,16 +1,13 @@
 # End-to-end platform test: CSV → Bronze (APPEND) → Silver (FULL).
 #
-# Demonstrates CODE_REVIEW.md #11: FULL runs under the checkpoint increment strategy,
-# so its write is "the current increment", not "the current dataset" the docs and
-# FULL's own contract (docs/03_write_verbs.md) promise. All three exports are landed
-# in inbound before the pipeline ever runs, so Auto Loader's availableNow trigger
-# (no maxFilesPerTrigger is set anywhere) picks up all three in the same backlog, and
-# bronze→silver's first-ever run reads all three as one increment. FULL then
-# overwrites silver with their raw union — 70 rows, duplicate keys — instead of the
-# 30 rows the third (and only relevant) export actually describes.
+# GH #22: FULL overwrites with the current dataset, which is the newest export. All
+# three exports are landed in inbound before the pipeline ever runs, so Auto Loader's
+# availableNow trigger picks up all three in the same backlog, and bronze→silver's
+# first-ever run reads all three as one increment. FULL must keep only the third
+# export's 30 rows, not the raw union of 70 with duplicate keys.
 #
-# One round is the point here, unlike scd2_csv_test's two: the defect only appears
-# when more than one snapshot lands in a single micro-batch.
+# One round is the point here, unlike scd2_csv_test's two: the case only appears
+# when more than one export lands in a single micro-batch.
 
 base: &base ${workspace.file_path}/platform_tests/full_csv_long_backlog_test
 cleanup_script: &cleanup_script ${workspace.file_path}/platform_tests/full_csv_long_backlog_test/0_cleanup.py

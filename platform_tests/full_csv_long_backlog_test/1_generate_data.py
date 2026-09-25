@@ -2,7 +2,7 @@
 
 The fixtures are committed CSVs under sample_data/, copied here rather than built —
 see _shared.py. Unlike scd2_csv_test's round-per-run staging, all three land in one
-step, up front. The bug this test demonstrates only shows up when Auto Loader's
+step, up front. The case this test covers only shows up when Auto Loader's
 availableNow trigger picks up more than one snapshot file in the same micro-batch —
 which happens whenever a backlog accumulates before a run, since neither reader sets
 maxFilesPerTrigger. Landing the exports one run at a time would avoid the very

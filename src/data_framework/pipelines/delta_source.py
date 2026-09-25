@@ -1,4 +1,4 @@
-"""Delta table origin — checkpoint, watermark, or latest-snapshot increments."""
+"""Delta table origin — checkpoint or watermark increments."""
 
 from __future__ import annotations
 
@@ -67,29 +67,7 @@ class DeltaSource:
             # incremental semantics to offer, and should fail loudly rather than be
             # silenced with skipChangeCommits, which would skip the changed data.
             return ctx.spark.readStream.option("ignoreDeletes", "true").table(table)
-        if ctx.increment_strategy == IncrementStrategy.LATEST_SNAPSHOT:
-            return self._latest_snapshot(ctx, table)
         return self._since_watermark(ctx, table)
-
-    def _latest_snapshot(self, ctx: Context, table: str) -> DataFrame:
-        """Only the newest snapshot, whatever the target holds.
-
-        A full snapshot already carries the complete state, so the newest file is the
-        whole truth and older ones are redundant. That keeps the read constant even
-        when the target has not moved for weeks — which is the case the watermark
-        handles badly, because its cut only advances when rows are actually written.
-        """
-        source = ctx.spark.table(table)
-        latest = source.agg(F.max(_EXPORT_DATE)).collect()[0][0]
-
-        ctx.logger.info(
-            name="latest_snapshot_resolved",
-            source=_SOURCE,
-            description=f"Reading only the snapshot at {_EXPORT_DATE} = {latest}",
-        )
-        if latest is None:
-            return source.limit(0)
-        return source.filter(F.col(_EXPORT_DATE) == F.lit(latest))
 
     def _since_watermark(self, ctx: Context, table: str) -> DataFrame:
         """Compare as timestamps, not as strings.

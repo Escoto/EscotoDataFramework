@@ -436,7 +436,8 @@ def test_snapshot_scope_full_rejected_for_append(mock_spark):
         build_context(config, mock_spark, RUN)
 
 
-def test_snapshot_scope_full_allowed_for_scd2():
+def test_snapshot_scope_full_rejected_for_scd2():
+    """SCD2 takes changes only; a full-snapshot source belongs on FULL or COMPLETE_DELTA."""
     config = _make_config(
         source=SourceConfig(origin=Origin.DELTA, schema_name="bronze", table="T_UPDATES"),
         output=OutputConfig(
@@ -448,7 +449,8 @@ def test_snapshot_scope_full_allowed_for_scd2():
             snapshot_scope=SnapshotScope.FULL,
         ),
     )
-    assert validate_requirements(config) == []
+    errors = validate_requirements(config)
+    assert errors == ["output.verb=scd2 does not support output.snapshot_scope=full"]
 
 
 def test_requirement_errors_aggregate():
@@ -531,19 +533,12 @@ def _scd2(**source_overrides) -> TaskConfig:
             table="SUBJECTS",
             keys=["ID"],
             event_time=EventTimeConfig(column="UPDATED_DATE"),
-            snapshot_scope=SnapshotScope.FULL,
         ),
     )
 
 
 def test_scd2_can_opt_into_the_watermark_strategy():
     config = _scd2(increment_strategy=IncrementStrategy.WATERMARK)
-
-    assert validate_requirements(config) == []
-
-
-def test_scd2_can_opt_into_the_latest_snapshot_strategy():
-    config = _scd2(increment_strategy=IncrementStrategy.LATEST_SNAPSHOT)
 
     assert validate_requirements(config) == []
 
@@ -563,42 +558,6 @@ def test_a_verb_refuses_a_strategy_it_does_not_declare():
     assert len(errors) == 1
     assert "does not support source.increment_strategy=watermark" in errors[0]
     assert "checkpoint" in errors[0]  # the error lists what the verb does support
-
-
-def test_complete_delta_refuses_latest_snapshot():
-    """Replay needs every snapshot; keeping only the newest would gut the verb."""
-    config = _make_config(
-        source=SourceConfig(
-            origin=Origin.DELTA,
-            schema_name="bronze_cro",
-            table="SUBJECTS_UPDATES",
-            snapshot_time_pattern=SnapshotTimePattern.DATETIME,
-            increment_strategy=IncrementStrategy.LATEST_SNAPSHOT,
-        ),
-        output=OutputConfig(
-            verb=Verb.COMPLETE_DELTA,
-            schema_name="silver_cro",
-            table="SUBJECTS",
-            keys=["ID"],
-            event_time=EventTimeConfig(column="UPDATED_DATE"),
-        ),
-    )
-
-    errors = validate_requirements(config)
-
-    assert any("latest_snapshot" in error for error in errors)
-
-
-def test_latest_snapshot_requires_a_full_snapshot_scope():
-    """On a delta feed it would silently drop every snapshot but the newest."""
-    config = _scd2(increment_strategy=IncrementStrategy.LATEST_SNAPSHOT)
-    delta_scope = config.model_copy(
-        update={"output": config.output.model_copy(update={"snapshot_scope": SnapshotScope.DELTA})}
-    )
-
-    errors = validate_requirements(delta_scope)
-
-    assert any("output.snapshot_scope=full" in error for error in errors)
 
 
 def test_an_anchor_is_refused_outside_the_watermark_strategy():

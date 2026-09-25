@@ -32,6 +32,8 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 
 - **Requires**: target only.
 - **Semantics**: Delta `overwrite` of the target with the current dataset (with `mergeSchema`). Empty input → **skip** with an audit log entry. A source that produced nothing is a run with no news, not an instruction to empty the table.
+- **Current dataset = newest export**: a backlog can hand one batch several exports. Only the rows carrying the batch's latest `__EXPORT_DATE` are written; the older exports are superseded, never unioned in.
+- **Newer always wins**: a batch whose export is older than the target's `max(__EXPORT_DATE)` is **skipped** with an audit log entry. Yesterday's snapshot never overwrites today's.
 
 ## 3. UPSERT — *new in the rewrite* (SCD Type 1)
 
@@ -49,14 +51,15 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
 > *Latest from one layer to the next, history-tracked by keys and date.*
 
 - **Requires**: `output.keys`, `output.event_time.column` (+ `.format` if it is a string column).
-- **Optional**: `output.dedup.*`, `output.snapshot_scope` (§6).
-- **No deletes feed**: SCD2 runs per batch, and a stream has no way to cut a second source at the same point as its updates. A source that sends deletes separately belongs on COMPLETE_DELTA; a full-snapshot source expresses deletion by omission (§6).
+- **Optional**: `output.dedup.*`.
+- **Changes only**: every batch is a set of changes. A key the batch does not mention is left untouched — its absence is never read as a deletion. `snapshot_scope: full` is rejected: expiring and re-inserting every record on each load would turn Silver into a duplicate of Bronze. A source whose complete snapshot *is* the truth belongs on FULL (no history) or COMPLETE_DELTA with `snapshot_scope: full` (history kept).
+- **No deletes feed**: SCD2 runs per batch, and a stream has no way to cut a second source at the same point as its updates. A source that sends deletes separately belongs on COMPLETE_DELTA.
 - **Increments**: delta origin with streaming checkpoint (each micro-batch flows through the algorithm below); file origins supported the same way.
 
 **Algorithm** (per batch):
 
 1. Optional rename patterns; event-time/dedup-column normalization to timestamp. These normalized columns are held internally and never persisted, so the target schema stays the one the source defines.
-2. Dedup (on by default): keep the latest row per key (`output.keys`), ordered by event time desc. `dedup.columns` / `dedup.order_by` override either.
+2. Dedup (on by default): keep the latest row per key (`output.keys`), ordered by event time desc, ties broken by `__EXPORT_DATE` desc (the newer export wins). `dedup.columns` / `dedup.order_by` override either.
 3. Add `__SILVER_LAST_MODIFIED_DT`; drop `__BRONZE_LAST_MODIFIED_DT`.
 4. Target absent → create with metadata init (`__START_DATE` = event_time or now, `__END_DATE` = NULL, flags Y/N).
 5. Target present:
@@ -64,7 +67,7 @@ The Output layer writes with one of five verbs. Verbs are **layer-agnostic**: an
    b. **Close**: Delta merge — matched current, not-deleted rows with older event_time get `__END_DATE` = source event_time, `__CURRENT_FLAG` = 'N'.
    c. **Insert**: surviving source rows appended as new current rows.
 
-Note: SCD2 collapses to *latest per key within the processed increment* (step 2). If the increment contains v1→v2→v3 of the same key, Silver records the transition current-state → v3. When **every** intermediate version must appear in history, use COMPLETE_DELTA.
+Note: SCD2 collapses to *latest per key within the processed increment* (step 2). If the increment contains v1→v2→v3 of the same key, Silver records the transition current-state → v3. A backlog split across several micro-batches leaves one history row per batch, and the current row is always the newest. When **every** intermediate version must appear in history, use COMPLETE_DELTA.
 
 ## 5. COMPLETE_DELTA
 
@@ -102,11 +105,13 @@ All three land in Bronze before the Silver task runs (a backlog — weekend, rep
 
 Every evolution is represented: A's full version chain with correct validity windows, and B's life-and-deletion. Plain SCD2 over the same backlog would dedup to the latest per key and produce only `A v3 (current)` — A's v1→v2 transitions and B's existence would never reach Silver. **This is the "everything from one layer to the next, not only the very latest" requirement.**
 
-## 6. Modifier: `snapshot_scope` (SCD2, COMPLETE_DELTA)
+## 6. Modifier: `snapshot_scope` (COMPLETE_DELTA)
 
 - **`delta`** (default): the source sends only changes. Records absent from an increment are simply untouched.
-- **`full`**: the source sends the complete dataset every time. Before merging a snapshot, **all** current rows in the target are expired (`__CURRENT_FLAG`='N', `__END_DATE`=now). The merge then re-inserts what the snapshot contains — anything absent stays expired. This is how implicit deletes work for full-snapshot sources.
+- **`full`**: the source sends the complete dataset — typically a monthly or on-demand export that supersedes whatever Silver holds, while history stays. Pending full exports are replayed one by one, oldest first. Before merging a snapshot, **all** current rows in the target are expired (`__CURRENT_FLAG`='N', `__END_DATE`=now). The merge then re-inserts what the snapshot contains — anything absent stays expired. This is how implicit deletes work for full-snapshot sources.
 - Re-run with no new data: nothing is expired and nothing merged — the watermark and the anti-filter together make the whole run a no-op. Re-running a job must never change the table.
+- **Full + delta feeds**: a source that sends both runs them as two tasks into the same Silver — the full task (`snapshot_scope: full`) first, then the delta task. The delta task's watermark then applies only the deltas stamped after the newest full export.
+- SCD2 does not take this modifier (§4).
 
 ### Worked example
 
@@ -135,7 +140,8 @@ No physical deletes, ever — history is preserved.
 | Land raw files into Bronze | `append` (or `full` for full-refresh drops) |
 | Bronze→Silver, source sends change feeds, all history must be visible | `complete_delta` |
 | Bronze→Silver, current-state tracking with history, latest per batch is enough | `scd2` |
-| Source sends complete snapshots and absent = deleted | `scd2`/`complete_delta` + `snapshot_scope: full` |
+| Source sends complete snapshots, only the latest matters | `full` |
+| Source sends complete snapshots, absent = deleted, history must stay | `complete_delta` + `snapshot_scope: full` |
 | Bronze→Silver, latest state only, no history | `upsert` |
 | Reference data, full refresh | `full` |
 | Gold | not a verb — a materialized view over Silver ([Gold](00_overview.md#gold)) |

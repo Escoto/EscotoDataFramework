@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from pyspark.sql import functions as F
 
 from data_framework.context.config import (
     DedupConfig,
@@ -143,6 +144,58 @@ def test_full_never_wipes_the_target_with_an_empty_batch(spark, database):
     writer.write(_people(spark, []), ctx)
 
     assert _rows(spark, database) == {("1", "alice")}
+
+
+EXPORTS = f"{PEOPLE}, __EXPORT_DATE timestamp"
+
+
+def _exports(spark, rows):
+    """People rows tagged with the day of the export they arrived in."""
+    return spark.createDataFrame([(*row[:3], datetime(2024, 1, row[3])) for row in rows], EXPORTS)
+
+
+def test_full_stamps_the_write_time_and_drops_the_bronze_one(spark, database):
+    ctx = _ctx(spark, database, verb=Verb.FULL)
+    bronze = _people(spark, [("1", "alice", "x")]).withColumn(
+        "__BRONZE_LAST_MODIFIED_DT", F.current_timestamp()
+    )
+
+    FullWriter().write(bronze, ctx)
+
+    target = spark.table(f"`{database}`.`TARGET`")
+    assert "__BRONZE_LAST_MODIFIED_DT" not in target.columns
+    assert isinstance(target.collect()[0]["__SILVER_LAST_MODIFIED_DT"], datetime)
+
+
+def test_full_keeps_only_the_newest_export_of_a_backlog(spark, database):
+    """Export 2 supersedes export 1: bob is dropped and alice is not written twice."""
+    ctx = _ctx(spark, database, verb=Verb.FULL)
+
+    FullWriter().write(
+        _exports(
+            spark,
+            [
+                ("1", "alice", "x", 1),
+                ("2", "bob", "x", 1),
+                ("1", "alice", "y", 2),
+            ],
+        ),
+        ctx,
+    )
+
+    assert _rows(spark, database) == {("1", "alice")}
+    assert spark.table(f"`{database}`.`TARGET`").count() == 1
+
+
+def test_full_never_replaces_a_newer_export_with_an_older_one(spark, database):
+    ctx = _ctx(spark, database, verb=Verb.FULL)
+    writer = FullWriter()
+    writer.write(_exports(spark, [("2", "bob", "y", 2)]), ctx)
+
+    writer.write(_exports(spark, [("1", "alice", "x", 1)]), ctx)
+
+    assert _rows(spark, database) == {("2", "bob")}
+    assert ctx.logger.warning.call_args.kwargs["name"] == "full_load_skipped"
     assert ctx.logger.warning.call_args.kwargs["name"] == "full_load_skipped"
 
 

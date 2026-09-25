@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
-
 from functools import reduce
 from operator import and_
+from typing import TYPE_CHECKING
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -15,6 +14,7 @@ from data_framework.context.config import SchemaEvolution
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from datetime import datetime
 
     from pyspark.sql import Column, DataFrame
 
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 BRONZE_TIMESTAMP = "__BRONZE_LAST_MODIFIED_DT"
 SILVER_TIMESTAMP = "__SILVER_LAST_MODIFIED_DT"
 FILE_PATH = "__FILEPATH"
+EXPORT_DATE = "__EXPORT_DATE"
 
 # History columns, written by SCD2 and COMPLETE_DELTA only.
 START_DATE = "__START_DATE"
@@ -150,12 +151,25 @@ def deduplicate(df: DataFrame, ctx: Context) -> DataFrame:
     else:
         assert output.event_time  # guaranteed at Start when dedup is enabled
         order = as_timestamp(output.event_time.column, output.event_time.format)
-    window = Window.partitionBy(*[F.col(f"`{c}`") for c in columns]).orderBy(order.desc())
+
+    # A backlog often resends a key with the same event time; the newer export must win
+    # rather than an arbitrary one.
+    orders = [order.desc()]
+    if EXPORT_DATE in df.columns:
+        orders.append(F.col(EXPORT_DATE).desc())
+    window = Window.partitionBy(*[F.col(f"`{c}`") for c in columns]).orderBy(*orders)
     return (
         df.withColumn(_DEDUP_RANK, F.row_number().over(window))
         .filter(F.col(_DEDUP_RANK) == 1)
         .drop(_DEDUP_RANK)
     )
+
+
+def latest_export(df: DataFrame) -> datetime | None:
+    """The newest __EXPORT_DATE in df, or None when it carries no stamp."""
+    if EXPORT_DATE not in df.columns:
+        return None
+    return df.agg(F.max(EXPORT_DATE)).collect()[0][0]
 
 
 def promote(df: DataFrame) -> DataFrame:

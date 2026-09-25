@@ -45,15 +45,12 @@ class Scd2Writer:
     requires: ClassVar[Requirements] = Requirements(
         keys=True,
         event_time=True,
-        supports_snapshot_scope=True,
-        # Checkpoint stays the default so nothing changes silently. Watermark suits a
-        # source that carries a per-record date; latest_snapshot suits one that resends
-        # an unchanged full snapshot, where reading the backlog is pure waste.
-        increment_strategies=(
-            IncrementStrategy.CHECKPOINT,
-            IncrementStrategy.WATERMARK,
-            IncrementStrategy.LATEST_SNAPSHOT,
-        ),
+        # No snapshot_scope: every batch is a set of changes. Expiring and re-inserting
+        # the whole table per load would make Silver a duplicate of Bronze; a
+        # full-snapshot source belongs on FULL or COMPLETE_DELTA.
+        # Checkpoint stays the default; watermark suits a source that carries a
+        # per-record date.
+        increment_strategies=(IncrementStrategy.CHECKPOINT, IncrementStrategy.WATERMARK),
     )
 
     def write(self, df: DataFrame, ctx: Context) -> None:
@@ -91,6 +88,7 @@ def merge_history(df: DataFrame, ctx: Context) -> None:
         )
         return
 
+    # Only COMPLETE_DELTA reaches this: SCD2 rejects snapshot_scope=full at Start.
     if ctx.config.output.snapshot_scope == SnapshotScope.FULL:
         _expire_all_current(ctx)
 

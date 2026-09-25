@@ -3,18 +3,18 @@
 Deliberately dependency-free: these run as spark_python_task on a cluster, not
 under pytest, so a failed assert is what fails the task.
 
-Demonstrates CODE_REVIEW.md #6: SCD2 treats each micro-batch as one snapshot. All
-three exports here land in inbound before the pipeline ever runs, so Auto Loader's
-availableNow trigger (no maxFilesPerTrigger is set anywhere) hands SCD2's first-ever
-run all three as one batch. deduplicate() only collapses a key that repeats *within*
-that batch, so a key present in an earlier export but absent from the latest one —
-KEYSEQ 15 and 20, dropped in export 3 — has nothing to dedup against and survives as
-current, even though the newest full export no longer contains it.
+SCD2 takes changes, never full snapshots (GH #22). All three exports land in inbound
+before the pipeline runs, so Auto Loader's availableNow trigger hands SCD2's first
+silver run all three as one batch. Each key must end with exactly one current row, at
+the newest version any export sent. KEYSEQ 15 and 20 are absent from export 3, and
+under change semantics absence is not deletion: they stay current at export 2's
+version. Keys 11-20 are resent unchanged in export 2 (same REFRESHDATE), so the tie
+must go to the newer export.
 
 The three exports are committed under sample_data/ rather than generated at run time
 — fully synthetic (a fictional study, invented milestones), same shape as
 full_csv_long_backlog_test's fixture, but with two keys the third export
-deliberately drops.
+deliberately omits.
 """
 
 CATALOG = "testing_dev_01"
@@ -70,13 +70,14 @@ SILVER_COLUMNS = BUSINESS_COLUMNS | {
 # is what __EXPORT_DATE is cut from — a week apart, so ordering is unambiguous.
 EXPORT_1 = "STUDY_MILESTONE_20260901050000Z.csv"  # baseline: 20 keys, all pending
 EXPORT_2 = "STUDY_MILESTONE_20260908050000Z.csv"  # resend of 20: keys 1-10 completed
-EXPORT_3 = "STUDY_MILESTONE_20260915050000Z.csv"  # resend of 23: drops keys 15 & 20, 5 new
+EXPORT_3 = "STUDY_MILESTONE_20260915050000Z.csv"  # 23 keys: omits 15 & 20, 5 new
 EXPORTS = (EXPORT_1, EXPORT_2, EXPORT_3)
 
-# Keys 15 and 20 are in exports 1-2 but the source stopped sending them in export 3 —
-# a real full-scope deletion. The correct current set is exactly export 3's 23 keys.
-DROPPED_KEYS = ("15", "20")
-SILVER_EXPECTED = 23
+# Keys 15 and 20 are in exports 1-2 but not in export 3. They stay current at their
+# export-2 version: 20 keys from exports 1-2 plus 5 new ones from export 3.
+OMITTED_KEYS = ("15", "20")
+OMITTED_KEYS_EXPORT = "2026-09-08 05:00:00"
+SILVER_EXPECTED = 25
 
 
 def qualified(table: str) -> str:

@@ -1,12 +1,8 @@
-"""Step 3 — the current set in silver must match export 3, the latest full truth.
+"""Step 3 — every key has exactly one current row, at its newest version.
 
-This is expected to FAIL until CODE_REVIEW.md #6 ("SCD2 full scope merges a backlog
-as one snapshot") is fixed. Keys 15 and 20 are in exports 1 and 2 but export 3 — the
-newest, most authoritative full snapshot — no longer sends them, so they should not
-be current. deduplicate() only collapses a key that repeats *within* the combined
-batch; a key present in an earlier export but entirely absent from the latest one has
-nothing to dedup against, so it survives as current instead of disappearing with the
-export that dropped it.
+SCD2 takes changes: a key the newest export omits is untouched, not deleted. KEYSEQ
+15 and 20 therefore stay current at export 2's version, which wins over export 1's
+identical resend because it is the newer export.
 """
 
 import sys
@@ -16,7 +12,8 @@ import sys
 sys.path.append(sys.argv[1])
 
 from _shared import (  # noqa: E402
-    DROPPED_KEYS,
+    OMITTED_KEYS,
+    OMITTED_KEYS_EXPORT,
     SILVER_COLUMNS,
     SILVER_EXPECTED,
     SILVER_TABLE,
@@ -35,18 +32,24 @@ df = spark.table(qualified(SILVER_TABLE))
 
 expect_columns(df, SILVER_COLUMNS)
 
-live = current(df)
+# The first run creates the target from one deduplicated batch: one row per key.
+expect_rows(df, SILVER_EXPECTED)
 
-# The headline assertion: only export 3's 23 keys should be current.
+live = current(df)
 expect_rows(live, SILVER_EXPECTED)
 
-# Keys the latest full export dropped must not still be current.
-for key in DROPPED_KEYS:
-    survivors = live.filter(F.col("KEYSEQ") == key).count()
-    assert survivors == 0, f"KEYSEQ {key} was dropped by export 3 but is still current"
+duplicated = live.groupBy("KEYSEQ").count().filter(F.col("count") > 1).select("KEYSEQ").collect()
+assert not duplicated, f"KEYSEQ(s) current more than once: {[r['KEYSEQ'] for r in duplicated]}"
 
-# A key export 3 actually carries and updated must reflect its value, not an
-# earlier export's.
+# Omitted by export 3, so untouched: current, at the newer of the two identical resends.
+for key in OMITTED_KEYS:
+    kept = live.filter(
+        (F.col("KEYSEQ") == key)
+        & (F.col("__EXPORT_DATE") == F.to_timestamp(F.lit(OMITTED_KEYS_EXPORT)))
+    )
+    assert kept.count() == 1, f"KEYSEQ {key} should stay current at export 2's version"
+
+# A key export 3 updated must reflect export 3, not an earlier export.
 completed = live.filter((F.col("KEYSEQ") == "11") & (F.col("MILESTONEVALUE") == "Completed"))
 assert completed.count() == 1, "KEYSEQ 11 should be Completed per export 3"
 
